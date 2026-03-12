@@ -460,10 +460,8 @@
             const sx = p.startX + offsetX;
             const sy = p.startY;
 
-            // Target: upper area on the side the face is looking toward
-            const tx = dir > 0
-                ? W * (1 - P.targetX)    // facing right → target upper-right
-                : W * P.targetX;          // facing left → target upper-left
+            // Target: always upper-left of screen
+            const tx = W * P.targetX;
             const ty = H * P.targetY;
 
             // CP1: go UP first (above the head) to clear the face
