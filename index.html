@@ -208,6 +208,8 @@
             targetY:       0.20,
             colorStartR: 255, colorStartG: 255, colorStartB: 255,
             colorEndR: 220, colorEndG: 50, colorEndB: 50,
+            burstDistance: 80,
+            burstDuration: 0.08,
         };
 
         // ─── Build tweaks UI ───
@@ -219,6 +221,9 @@
                 { key: 'noiseAmp',     label: 'Noise amp',     min: 0,  max: 30, step: 0.5 },
                 { key: 'noiseFreq',    label: 'Noise freq',    min: 0.5, max: 8, step: 0.1 },
                 { key: 'fadeInTime',   label: 'Fade-in (s)',   min: 0.01, max: 0.5, step: 0.01 },
+                { section: 'Burst' },
+                { key: 'burstDistance', label: 'Burst dist (px)', min: 10, max: 300, step: 5 },
+                { key: 'burstDuration', label: 'Burst time %',    min: 0.02, max: 0.3, step: 0.01 },
                 { section: 'Spline Shape' },
                 { key: 'cpPull1',      label: 'CP1 pull',      min: 0.1, max: 0.6, step: 0.01 },
                 { key: 'cpPull2',      label: 'CP2 pull',      min: 0.4, max: 0.9, step: 0.01 },
@@ -270,7 +275,9 @@
         let smoothMouthX = 0, smoothMouthY = 0;
         let hasFace = false;
         let faceYaw = 0;       // -1 = facing left, +1 = facing right (screen space)
+        let facePitch = 0;     // -1 = looking up, +1 = looking down
         let smoothYaw = 0;
+        let smoothPitch = 0;
 
         // Each particle: { char, spawnTime, startX, startY, seed, burstDx, burstDy }
         let particles        = [];
@@ -390,18 +397,30 @@
                         : 0;
                     const clampedYaw = Math.max(-1, Math.min(1, rawYaw));
 
+                    // Face pitch: nose tip vs face vertical center (forehead lm 10, chin lm 152)
+                    const forehead = lm[10], chin = lm[152];
+                    const faceCY = (forehead.y + chin.y) / 2;
+                    const faceH = Math.abs(chin.y - forehead.y);
+                    const rawPitch = faceH > 0.001
+                        ? (nose.y - faceCY) / (faceH * 0.5)
+                        : 0;
+                    const clampedPitch = Math.max(-1, Math.min(1, rawPitch));
+
                     const sm = 1 - P.mouthSmooth;
                     if (!hasFace) {
                         smoothMouthX = rawX; smoothMouthY = rawY;
                         smoothYaw = clampedYaw;
+                        smoothPitch = clampedPitch;
                     } else {
                         smoothMouthX += (rawX - smoothMouthX) * sm;
                         smoothMouthY += (rawY - smoothMouthY) * sm;
                         smoothYaw += (clampedYaw - smoothYaw) * sm * 0.5;
+                        smoothPitch += (clampedPitch - smoothPitch) * sm * 0.5;
                     }
                     mouthX = smoothMouthX;
                     mouthY = smoothMouthY;
                     faceYaw = smoothYaw;
+                    facePitch = smoothPitch;
                     hasFace = true;
                 } else { hasFace = false; }
             } catch (e) { console.warn('Face detect error:', e); }
@@ -470,12 +489,22 @@
                 1 + Math.floor((elapsed / segDuration) * text.length));
             const now = performance.now() / 1000;
             while (charSpawnIndex < charsToSpawn && charSpawnIndex < text.length) {
-                // Burst direction based on face yaw:
-                // Facing right → burst right (angle ~0), facing left → burst left (angle ~PI)
-                // Always slightly upward, with random spread
-                const facingRight = faceYaw > 0;
-                const baseAngle = facingRight ? -0.3 : (Math.PI + 0.3); // slight upward tilt
-                const spread = (Math.random() - 0.5) * 0.8; // ±0.4 radians
+                // Burst direction based on face yaw + pitch:
+                // Build a 2D direction vector from face orientation
+                // yaw: positive = facing right (screen), negative = facing left
+                // pitch: positive = looking down, negative = looking up
+                // Mirror yaw for screen space (webcam is mirrored)
+                let dirX = faceYaw;   // left/right
+                let dirY = facePitch; // up/down
+                // Normalize; if face is nearly centered, default to left burst
+                let dirLen = Math.sqrt(dirX * dirX + dirY * dirY);
+                if (dirLen < 0.15) {
+                    dirX = -1; dirY = -0.2; dirLen = Math.sqrt(dirX * dirX + dirY * dirY);
+                }
+                dirX /= dirLen; dirY /= dirLen;
+                // Add random spread (±0.4 radians)
+                const baseAngle = Math.atan2(dirY, dirX);
+                const spread = (Math.random() - 0.5) * 0.8;
                 const burstAngle = baseAngle + spread;
                 particles.push({
                     char: text[charSpawnIndex],
@@ -564,14 +593,12 @@
 
                 // Burst phase: for the first ~8% of life, shoot outward from the mouth
                 // then smoothly blend into the spline path
-                const BURST_DURATION = 0.08; // fraction of lifetime
-                const BURST_DISTANCE = 80;   // max px the burst travels
                 let pos;
-                if (linearT < BURST_DURATION) {
-                    const burstT = linearT / BURST_DURATION; // 0→1 during burst
+                if (linearT < P.burstDuration) {
+                    const burstT = linearT / P.burstDuration; // 0→1 during burst
                     const burstEased = 1 - Math.pow(1 - burstT, 2); // ease-out
-                    const burstX = p.startX + p.burstDx * BURST_DISTANCE * burstEased;
-                    const burstY = p.startY + p.burstDy * BURST_DISTANCE * burstEased;
+                    const burstX = p.startX + p.burstDx * P.burstDistance * burstEased;
+                    const burstY = p.startY + p.burstDy * P.burstDistance * burstEased;
                     // Blend from burst position to spline position
                     const blend = burstT * burstT; // ease-in blend toward spline
                     pos = {
