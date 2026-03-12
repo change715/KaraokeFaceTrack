@@ -683,8 +683,8 @@
 
             renderParticles(timestamp);
 
-            // Mouth dot
-            if (hasFace) {
+            // Mouth dot (hidden in clean mode)
+            if (hasFace && !cleanMode) {
                 ctx.save();
                 ctx.globalAlpha = 0.3;
                 ctx.beginPath();
