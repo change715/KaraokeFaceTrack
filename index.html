@@ -9,7 +9,7 @@
         body {
             background: #000;
             overflow: hidden;
-            font-family: 'Georgia', serif;
+            font-family: 'Helvetica Neue', Arial, sans-serif;
             color: #fff;
         }
         #container {
@@ -60,7 +60,7 @@
             border-radius: 50px;
             cursor: pointer;
             transition: all 0.3s;
-            font-family: 'Georgia', serif;
+            font-family: 'Helvetica Neue', Arial, sans-serif;
         }
         #startBtn:hover { background: rgba(255,255,255,0.25); border-color: #fff; }
         #startBtn:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -210,6 +210,7 @@
             colorEndR: 220, colorEndG: 50, colorEndB: 50,
             burstDistance: 80,
             burstDuration: 0.08,
+            targetNoise: 15,
         };
 
         // ─── Build tweaks UI ───
@@ -225,11 +226,12 @@
                 { key: 'burstDistance', label: 'Burst dist (px)', min: 10, max: 300, step: 5 },
                 { key: 'burstDuration', label: 'Burst time %',    min: 0.02, max: 0.3, step: 0.01 },
                 { section: 'Spline Shape' },
-                { key: 'cpPull1',      label: 'CP1 pull',      min: 0.1, max: 0.6, step: 0.01 },
-                { key: 'cpPull2',      label: 'CP2 pull',      min: 0.4, max: 0.9, step: 0.01 },
+                { key: 'cpPull1',      label: 'CP1 pull',      min: -0.5, max: 1.5, step: 0.01 },
+                { key: 'cpPull2',      label: 'CP2 pull',      min: -0.5, max: 1.5, step: 0.01 },
                 { key: 'cpCurve',      label: 'Curvature',     min: -0.5, max: 0.5, step: 0.01 },
                 { key: 'targetX',      label: 'Target X %',    min: 0, max: 0.4, step: 0.01 },
                 { key: 'targetY',      label: 'Target Y %',    min: 0, max: 0.4, step: 0.01 },
+                { key: 'targetNoise',  label: 'End noise',     min: 0, max: 60, step: 1 },
                 { section: 'Tracking' },
                 { key: 'mouthSmooth',  label: 'Smoothing',     min: 0, max: 0.95, step: 0.01 },
                 { section: 'End Color (RGB)' },
@@ -443,9 +445,11 @@
         // Each particle has its own spline: from its birth mouth pos → fixed upper-left target
         function getParticlePos(p, t) {
             const W = canvas.width, H = canvas.height;
-            // Target: upper-left area of the screen (absolute)
+            // Target: upper-left area of the screen with per-particle vertical noise
             const tx = W * P.targetX;
-            const ty = H * P.targetY;
+            const tyBase = H * P.targetY;
+            const targetOffset = (Math.sin(p.seed * 7.13) * 0.5 + Math.sin(p.seed * 3.71) * 0.3 + Math.sin(p.seed * 11.3) * 0.2) * P.targetNoise;
+            const ty = tyBase + targetOffset;
             // Vector from start to target
             const dx = tx - p.startX;
             const dy = ty - p.startY;
@@ -619,8 +623,8 @@
                 }
                 // Fade based on eased spline position — chars disappear before
                 // they pile up at the endpoint
-                if (t > 0.55) {
-                    alpha *= 1.0 - (t - 0.55) / 0.45;
+                if (t > 0.45) {
+                    alpha *= 1.0 - (t - 0.45) / 0.55;
                 }
                 alpha = Math.max(0, Math.min(1, alpha));
                 if (alpha <= 0) continue;
@@ -639,7 +643,7 @@
 
                 ctx.save();
                 ctx.globalAlpha = alpha;
-                ctx.font = `bold ${size}px Georgia, serif`;
+                ctx.font = `bold ${size}px 'Helvetica Neue', Arial, sans-serif`;
                 ctx.fillStyle = `rgb(${r},${g},${b})`;
                 ctx.shadowColor = 'rgba(0,0,0,0.7)';
                 ctx.shadowBlur = 4;
@@ -719,6 +723,18 @@
                 tweaksPanel.classList.remove('open');
                 tweaksPanel.style.display = cleanMode ? 'none' : '';
                 statusEl.style.display = cleanMode ? 'none' : '';
+            }
+            if (e.key === '2') {
+                // Restart song from the beginning
+                audio.currentTime = 0;
+                particles = [];
+                lastSegmentIndex = -1;
+                charSpawnIndex = 0;
+                subtitleBox.innerHTML = '';
+                if (audio.paused && running) {
+                    audio.play().catch(err => log('Audio error: ' + err.message));
+                }
+                log('Restarted');
             }
         });
 
