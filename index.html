@@ -40,7 +40,6 @@
             justify-content: center;
             background: rgba(0,0,0,0.85);
             z-index: 100;
-            cursor: pointer;
         }
         #startScreen h1 {
             font-size: 3rem;
@@ -63,51 +62,111 @@
             transition: all 0.3s;
             font-family: 'Georgia', serif;
         }
-        #startBtn:hover {
-            background: rgba(255,255,255,0.25);
-            border-color: #fff;
-        }
-        #startBtn:disabled {
-            opacity: 0.4;
-            cursor: not-allowed;
-        }
+        #startBtn:hover { background: rgba(255,255,255,0.25); border-color: #fff; }
+        #startBtn:disabled { opacity: 0.4; cursor: not-allowed; }
         #status {
             position: absolute;
-            top: 12px;
-            left: 12px;
-            font-size: 0.8rem;
-            opacity: 0.5;
+            top: 12px; left: 12px;
+            font-size: 0.75rem;
+            opacity: 0.45;
             z-index: 150;
             background: rgba(0,0,0,0.5);
             padding: 3px 8px;
             border-radius: 4px;
         }
-        /* ─── Subtitle bar ─── */
-        #subtitle-bar {
+
+        /* ─── Subtitle box ─── */
+        #subtitle-box {
             position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            background: rgba(0, 0, 0, 0.75);
-            padding: 16px 30px;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            padding: 12px 28px;
+            border-radius: 10px;
             text-align: center;
             z-index: 50;
             pointer-events: none;
-            font-size: 1.3rem;
-            line-height: 1.6;
-            min-height: 60px;
+            font-size: 1.2rem;
+            line-height: 1.5;
+            max-width: 700px;
+            min-width: 200px;
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
         }
-        #subtitle-bar .past    { color: rgba(140, 120, 220, 0.85); }
-        #subtitle-bar .current { color: #fff; }
-        #subtitle-bar .future  { color: rgba(255,255,255,0.35); }
+
+        /* ─── Tweaks panel ─── */
+        #tweaks-toggle {
+            position: absolute;
+            top: 12px; right: 12px;
+            z-index: 200;
+            background: rgba(0,0,0,0.6);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: #fff;
+            padding: 5px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            font-family: sans-serif;
+        }
+        #tweaks-toggle:hover { background: rgba(255,255,255,0.15); }
+        #tweaks-panel {
+            position: absolute;
+            top: 44px; right: 12px;
+            z-index: 200;
+            background: rgba(15, 15, 20, 0.92);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 10px;
+            padding: 16px 20px;
+            width: 300px;
+            max-height: 80vh;
+            overflow-y: auto;
+            display: none;
+            font-family: sans-serif;
+            font-size: 0.78rem;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        #tweaks-panel.open { display: block; }
+        #tweaks-panel h3 {
+            margin: 12px 0 6px 0;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            opacity: 0.5;
+        }
+        #tweaks-panel h3:first-child { margin-top: 0; }
+        .tweak-row {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+            gap: 8px;
+        }
+        .tweak-row label {
+            flex: 0 0 100px;
+            opacity: 0.8;
+        }
+        .tweak-row input[type="range"] {
+            flex: 1;
+            accent-color: #88aaff;
+        }
+        .tweak-row .val {
+            flex: 0 0 40px;
+            text-align: right;
+            opacity: 0.6;
+            font-size: 0.7rem;
+            font-family: monospace;
+        }
     </style>
 </head>
 <body>
     <div id="container">
         <video id="webcam" autoplay playsinline muted></video>
         <canvas id="overlay"></canvas>
-        <div id="subtitle-bar"></div>
+        <div id="subtitle-box"></div>
         <div id="status">Loading...</div>
+        <button id="tweaks-toggle">Tweaks</button>
+        <div id="tweaks-panel"></div>
         <div id="startScreen">
             <h1>Karaoke Face Track</h1>
             <p>Hallelujah &mdash; Leonard Cohen</p>
@@ -124,13 +183,86 @@
         const canvas      = document.getElementById('overlay');
         const ctx         = canvas.getContext('2d');
         const statusEl    = document.getElementById('status');
-        const subtitleBar = document.getElementById('subtitle-bar');
+        const subtitleBox = document.getElementById('subtitle-box');
         const startScreen = document.getElementById('startScreen');
         const startBtn    = document.getElementById('startBtn');
+        const tweaksToggle = document.getElementById('tweaks-toggle');
+        const tweaksPanel  = document.getElementById('tweaks-panel');
 
         // ─── Audio ───
         const audio = new Audio('Hallelujah_-_Leonard_Cohen_Karaoke_Version_KaraFun.wav');
         audio.preload = 'auto';
+
+        // ─── Tweakable params ───
+        const P = {
+            charSize:      42,
+            charLifetime:  4.0,
+            noiseAmp:      7,
+            noiseFreq:     2.5,
+            mouthSmooth:   0.3,
+            fadeInTime:     0.12,
+            // Spline shape: control points as fraction of the vector from mouth→target
+            cpPull1:       0.33,   // how far along the path CP1 sits
+            cpPull2:       0.66,   // how far along the path CP2 sits
+            cpCurve:       0.25,   // lateral curvature (perpendicular offset)
+            // Target corner offset from top-left (in % of screen)
+            targetX:       0.05,
+            targetY:       0.05,
+            // Color: start and end hue
+            colorStartR: 255, colorStartG: 255, colorStartB: 255,
+            colorEndR: 220, colorEndG: 50, colorEndB: 50,
+        };
+
+        // ─── Build tweaks UI ───
+        function buildTweaksUI() {
+            const defs = [
+                { section: 'Particles' },
+                { key: 'charSize',     label: 'Font size',     min: 16, max: 80, step: 1 },
+                { key: 'charLifetime', label: 'Lifetime (s)',  min: 1,  max: 10, step: 0.1 },
+                { key: 'noiseAmp',     label: 'Noise amp',     min: 0,  max: 30, step: 0.5 },
+                { key: 'noiseFreq',    label: 'Noise freq',    min: 0.5, max: 8, step: 0.1 },
+                { key: 'fadeInTime',   label: 'Fade-in (s)',   min: 0.01, max: 0.5, step: 0.01 },
+                { section: 'Spline Shape' },
+                { key: 'cpPull1',      label: 'CP1 pull',      min: 0.1, max: 0.6, step: 0.01 },
+                { key: 'cpPull2',      label: 'CP2 pull',      min: 0.4, max: 0.9, step: 0.01 },
+                { key: 'cpCurve',      label: 'Curvature',     min: -0.5, max: 0.5, step: 0.01 },
+                { key: 'targetX',      label: 'Target X %',    min: 0, max: 0.4, step: 0.01 },
+                { key: 'targetY',      label: 'Target Y %',    min: 0, max: 0.4, step: 0.01 },
+                { section: 'Tracking' },
+                { key: 'mouthSmooth',  label: 'Smoothing',     min: 0, max: 0.95, step: 0.01 },
+                { section: 'End Color (RGB)' },
+                { key: 'colorEndR',    label: 'Red',           min: 0, max: 255, step: 1 },
+                { key: 'colorEndG',    label: 'Green',         min: 0, max: 255, step: 1 },
+                { key: 'colorEndB',    label: 'Blue',          min: 0, max: 255, step: 1 },
+            ];
+
+            let html = '';
+            for (const d of defs) {
+                if (d.section) {
+                    html += `<h3>${d.section}</h3>`;
+                    continue;
+                }
+                html += `<div class="tweak-row">
+                    <label>${d.label}</label>
+                    <input type="range" data-key="${d.key}" min="${d.min}" max="${d.max}" step="${d.step}" value="${P[d.key]}">
+                    <span class="val" id="val-${d.key}">${P[d.key]}</span>
+                </div>`;
+            }
+            tweaksPanel.innerHTML = html;
+
+            tweaksPanel.querySelectorAll('input[type="range"]').forEach(inp => {
+                inp.addEventListener('input', () => {
+                    const key = inp.dataset.key;
+                    P[key] = parseFloat(inp.value);
+                    document.getElementById('val-' + key).textContent =
+                        Number.isInteger(P[key]) ? P[key] : P[key].toFixed(2);
+                });
+            });
+        }
+
+        tweaksToggle.addEventListener('click', () => {
+            tweaksPanel.classList.toggle('open');
+        });
 
         // ─── State ───
         let faceLandmarker   = null;
@@ -141,31 +273,11 @@
         let smoothMouthX = 0, smoothMouthY = 0;
         let hasFace = false;
 
-        // Character trail: array of { char, spawnTime, seed }
-        // Characters are placed along a shared spline from the mouth.
-        // The newest char is at the mouth end, oldest chars are further along the path.
-        let charTrail        = [];
+        // Each particle: { char, spawnTime, startX, startY, seed }
+        // startX/Y is the mouth position when the char was spawned (frozen at birth)
+        let particles        = [];
         let lastSegmentIndex = -1;
         let charSpawnIndex   = 0;
-
-        // ─── Config ───
-        const CHAR_SIZE       = 42;       // base font size
-        const CHAR_SPACING    = 30;       // spacing between chars along the spline (px)
-        const CHAR_MAX_AGE    = 5.0;      // seconds before a char fully disappears
-        const FADE_IN_TIME    = 0.15;     // seconds to fade in
-        const COLOR_SHIFT_START = 0.3;    // fraction of max age when color starts shifting to red
-        const NOISE_AMP       = 6;        // vertical noise amplitude
-        const NOISE_FREQ      = 2.5;      // noise frequency
-        const MOUTH_SMOOTH    = 0.3;      // smoothing factor for mouth position (0=no smooth, 1=frozen)
-
-        // Spline control: cubic bezier from mouth to upper-left
-        // These are relative offsets from the mouth position
-        const SPLINE_CP1_X = -180;   // first control point
-        const SPLINE_CP1_Y = -120;
-        const SPLINE_CP2_X = -420;   // second control point
-        const SPLINE_CP2_Y = -350;
-        const SPLINE_END_X = -600;   // endpoint
-        const SPLINE_END_Y = -550;
 
         function log(msg) {
             console.log('[Karaoke]', msg);
@@ -177,10 +289,9 @@
             const cleaned = timeStr.replace(/\s/g, '');
             const parts = cleaned.split('.');
             if (parts.length < 3) return 0;
-            const minutes = parseInt(parts[0], 10) || 0;
-            const seconds = parseInt(parts[1], 10) || 0;
-            const tenths  = parseInt(parts[2], 10) || 0;
-            return minutes * 60 + seconds + tenths * 0.1;
+            return (parseInt(parts[0],10)||0) * 60
+                 + (parseInt(parts[1],10)||0)
+                 + (parseInt(parts[2],10)||0) * 0.1;
         }
 
         // ─── Load lyrics ───
@@ -246,11 +357,9 @@
         }
 
         function syncCanvasSize() {
-            const w = canvas.clientWidth;
-            const h = canvas.clientHeight;
+            const w = canvas.clientWidth, h = canvas.clientHeight;
             if (w > 0 && h > 0 && (canvas.width !== w || canvas.height !== h)) {
-                canvas.width  = w;
-                canvas.height = h;
+                canvas.width = w; canvas.height = h;
             }
         }
 
@@ -260,257 +369,193 @@
             const ts = Math.round(timestamp);
             if (ts <= lastDetectTs) return;
             lastDetectTs = ts;
-
             try {
                 const results = faceLandmarker.detectForVideo(video, ts);
                 if (results.faceLandmarks && results.faceLandmarks.length > 0) {
                     const lm = results.faceLandmarks[0];
-                    const upper = lm[13];
-                    const lower = lm[14];
+                    const upper = lm[13], lower = lm[14];
                     const normX = 1.0 - (upper.x + lower.x) / 2;
                     const normY = (upper.y + lower.y) / 2;
                     const rawX = normX * canvas.width;
                     const rawY = normY * canvas.height;
-                    // Smooth mouth position to avoid jitter
-                    if (!hasFace) {
-                        smoothMouthX = rawX;
-                        smoothMouthY = rawY;
-                    } else {
-                        smoothMouthX += (rawX - smoothMouthX) * (1 - MOUTH_SMOOTH);
-                        smoothMouthY += (rawY - smoothMouthY) * (1 - MOUTH_SMOOTH);
+                    if (!hasFace) { smoothMouthX = rawX; smoothMouthY = rawY; }
+                    else {
+                        smoothMouthX += (rawX - smoothMouthX) * (1 - P.mouthSmooth);
+                        smoothMouthY += (rawY - smoothMouthY) * (1 - P.mouthSmooth);
                     }
                     mouthX = smoothMouthX;
                     mouthY = smoothMouthY;
                     hasFace = true;
-                } else {
-                    hasFace = false;
-                }
-            } catch (e) {
-                console.warn('Face detect error:', e);
-            }
+                } else { hasFace = false; }
+            } catch (e) { console.warn('Face detect error:', e); }
         }
 
-        // ─── Pseudo-noise ───
+        // ─── Noise ───
         function noise(t, seed) {
             return Math.sin(t * 2.1 + seed * 1.7) * 0.5
                  + Math.sin(t * 4.3 + seed * 3.1) * 0.3
                  + Math.sin(t * 7.7 + seed * 0.3) * 0.2;
         }
 
-        // ─── Cubic bezier evaluation ───
+        // ─── Cubic bezier ───
         function cubicBezier(t, p0, p1, p2, p3) {
-            const u  = 1 - t;
-            const u2 = u * u;
-            const u3 = u2 * u;
-            const t2 = t * t;
-            const t3 = t2 * t;
-            return u3 * p0 + 3 * u2 * t * p1 + 3 * u * t2 * p2 + t3 * p3;
+            const u = 1-t, u2 = u*u, u3 = u2*u, t2 = t*t, t3 = t2*t;
+            return u3*p0 + 3*u2*t*p1 + 3*u*t2*p2 + t3*p3;
         }
 
-        // ─── Get position on the spline for a given distance from the mouth ───
-        // dist: 0 = at mouth, 1 = at the far end of the spline
-        function getSplinePos(dist) {
-            const t = Math.min(dist, 1.0);
-            const x = cubicBezier(t, mouthX, mouthX + SPLINE_CP1_X, mouthX + SPLINE_CP2_X, mouthX + SPLINE_END_X);
-            const y = cubicBezier(t, mouthY, mouthY + SPLINE_CP1_Y, mouthY + SPLINE_CP2_Y, mouthY + SPLINE_END_Y);
+        // ─── Get particle position ───
+        // Each particle has its own spline: from its birth mouth pos → fixed upper-left target
+        function getParticlePos(p, t) {
+            const W = canvas.width, H = canvas.height;
+            // Target: upper-left area of the screen (absolute)
+            const tx = W * P.targetX;
+            const ty = H * P.targetY;
+            // Vector from start to target
+            const dx = tx - p.startX;
+            const dy = ty - p.startY;
+            // Perpendicular direction (for curvature)
+            const len = Math.sqrt(dx*dx + dy*dy) || 1;
+            const perpX = -dy / len;
+            const perpY =  dx / len;
+            // Control points along the start→target vector with lateral offset
+            const curveOffset = len * P.cpCurve;
+            const cp1x = p.startX + dx * P.cpPull1 + perpX * curveOffset;
+            const cp1y = p.startY + dy * P.cpPull1 + perpY * curveOffset;
+            const cp2x = p.startX + dx * P.cpPull2 + perpX * curveOffset * 0.5;
+            const cp2y = p.startY + dy * P.cpPull2 + perpY * curveOffset * 0.5;
+
+            const x = cubicBezier(t, p.startX, cp1x, cp2x, tx);
+            const y = cubicBezier(t, p.startY, cp1y, cp2y, ty);
             return { x, y };
-        }
-
-        // ─── Approximate arc length of spline for even spacing ───
-        // Pre-compute a lookup table each frame (since mouth moves)
-        const SPLINE_SAMPLES = 100;
-        let splineLengthTable = []; // { t, len } cumulative arc length
-        let totalSplineLength = 0;
-
-        function buildSplineLengthTable() {
-            splineLengthTable = [{ t: 0, len: 0 }];
-            let prevPos = getSplinePos(0);
-            let cumLen = 0;
-            for (let i = 1; i <= SPLINE_SAMPLES; i++) {
-                const t = i / SPLINE_SAMPLES;
-                const pos = getSplinePos(t);
-                const dx = pos.x - prevPos.x;
-                const dy = pos.y - prevPos.y;
-                cumLen += Math.sqrt(dx * dx + dy * dy);
-                splineLengthTable.push({ t, len: cumLen });
-                prevPos = pos;
-            }
-            totalSplineLength = cumLen;
-        }
-
-        // Given a desired arc-length distance, return the parameter t
-        function arcLengthToT(targetLen) {
-            if (targetLen <= 0) return 0;
-            if (targetLen >= totalSplineLength) return 1;
-            // Binary search
-            let lo = 0, hi = SPLINE_SAMPLES;
-            while (lo < hi - 1) {
-                const mid = (lo + hi) >> 1;
-                if (splineLengthTable[mid].len < targetLen) lo = mid;
-                else hi = mid;
-            }
-            const segStart = splineLengthTable[lo];
-            const segEnd   = splineLengthTable[hi];
-            const segLen   = segEnd.len - segStart.len;
-            const frac     = segLen > 0 ? (targetLen - segStart.len) / segLen : 0;
-            return segStart.t + frac * (segEnd.t - segStart.t);
         }
 
         // ─── Spawn characters ───
         function updateLyricSpawning(currentTime) {
-            let currentSeg    = null;
-            let currentSegIdx = -1;
+            let currentSeg = null, currentSegIdx = -1;
             for (let i = 0; i < lyricsData.length; i++) {
                 if (currentTime >= lyricsData[i].start && currentTime < lyricsData[i].end) {
-                    currentSeg    = lyricsData[i];
-                    currentSegIdx = i;
-                    break;
+                    currentSeg = lyricsData[i]; currentSegIdx = i; break;
                 }
             }
-
-            // Reset spawn counter on segment change
             if (currentSegIdx !== lastSegmentIndex) {
                 lastSegmentIndex = currentSegIdx;
-                charSpawnIndex   = 0;
+                charSpawnIndex = 0;
             }
-
             if (!currentSeg || !hasFace) return;
-
             const text = currentSeg.text;
             if (!text || text.length === 0) return;
-
-            const segDuration  = currentSeg.end - currentSeg.start;
+            const segDuration = currentSeg.end - currentSeg.start;
             if (segDuration <= 0) return;
-            const elapsed      = currentTime - currentSeg.start;
+            const elapsed = currentTime - currentSeg.start;
             const charsToSpawn = Math.floor((elapsed / segDuration) * text.length);
-
             const now = performance.now() / 1000;
             while (charSpawnIndex < charsToSpawn && charSpawnIndex < text.length) {
-                charTrail.push({
+                particles.push({
                     char: text[charSpawnIndex],
                     spawnTime: now,
+                    startX: mouthX,
+                    startY: mouthY,
                     seed: Math.random() * 100,
                 });
                 charSpawnIndex++;
             }
         }
 
-        // ─── Update subtitle bar ───
+        // ─── Karaoke-style subtitle ───
         function updateSubtitle(currentTime) {
-            // Find current segment index
             let curIdx = -1;
             for (let i = 0; i < lyricsData.length; i++) {
                 if (currentTime >= lyricsData[i].start && currentTime < lyricsData[i].end) {
-                    curIdx = i;
-                    break;
+                    curIdx = i; break;
                 }
             }
-            // If between segments, find the next one
             if (curIdx === -1) {
                 for (let i = 0; i < lyricsData.length; i++) {
-                    if (currentTime < lyricsData[i].start) {
-                        curIdx = i;
-                        break;
-                    }
+                    if (currentTime < lyricsData[i].start) { curIdx = i; break; }
                 }
             }
+            if (curIdx === -1) { subtitleBox.innerHTML = ''; return; }
 
-            // Show a window of segments around current
-            const WINDOW = 2;
-            const startIdx = Math.max(0, (curIdx === -1 ? 0 : curIdx) - WINDOW);
-            const endIdx   = Math.min(lyricsData.length, (curIdx === -1 ? 0 : curIdx) + WINDOW + 1);
+            const seg = lyricsData[curIdx];
+            const text = seg.text;
+
+            if (currentTime < seg.start) {
+                // Upcoming — all dim
+                subtitleBox.innerHTML = `<span style="color:rgba(255,255,255,0.3)">${text}</span>`;
+                return;
+            }
+
+            // Gradual character-by-character highlight
+            const progress = (currentTime - seg.start) / (seg.end - seg.start);
+            const highlightChars = progress * text.length;
 
             let html = '';
-            for (let i = startIdx; i < endIdx; i++) {
-                const seg = lyricsData[i];
-                let cls;
-                if (currentTime >= seg.end) {
-                    cls = 'past';
-                } else if (currentTime >= seg.start) {
-                    cls = 'current';
+            for (let i = 0; i < text.length; i++) {
+                const ch = text[i];
+                if (i < Math.floor(highlightChars)) {
+                    // Fully highlighted
+                    html += `<span style="color:#88aaff">${ch}</span>`;
+                } else if (i < highlightChars) {
+                    // Partially highlighted — blend
+                    const frac = highlightChars - i;
+                    const r = Math.round(255 - (255 - 136) * frac);
+                    const g = Math.round(255 - (255 - 170) * frac);
+                    const b = Math.round(255 + (255 - 255) * frac);
+                    html += `<span style="color:rgb(${r},${g},${b})">${ch}</span>`;
                 } else {
-                    cls = 'future';
+                    // Not yet
+                    html += `<span style="color:rgba(255,255,255,0.85)">${ch}</span>`;
                 }
-                html += `<span class="${cls}">${seg.text} </span>`;
             }
-            subtitleBar.innerHTML = html;
+            subtitleBox.innerHTML = html;
         }
 
-        // ─── Render character trail along the spline ───
-        function renderCharTrail(nowMs) {
+        // ─── Lerp helper ───
+        function lerp(a, b, t) { return a + (b - a) * t; }
+
+        // ─── Render particles ───
+        function renderParticles(nowMs) {
             const nowSec = nowMs / 1000;
+            particles = particles.filter(p => (nowSec - p.spawnTime) < P.charLifetime);
 
-            // Remove chars that are too old
-            charTrail = charTrail.filter(ch => (nowSec - ch.spawnTime) < CHAR_MAX_AGE);
+            for (const p of particles) {
+                const age = nowSec - p.spawnTime;
+                const t = Math.min(age / P.charLifetime, 1.0); // 0→1 along spline
 
-            if (!hasFace || charTrail.length === 0) return;
+                const pos = getParticlePos(p, t);
 
-            // Build arc-length table for current mouth position
-            buildSplineLengthTable();
+                // Noise: perpendicular wobble
+                const noiseVal = noise(age * P.noiseFreq, p.seed) * P.noiseAmp;
 
-            // Place characters along the spline:
-            // The newest character (last in array) is at distance 0 (the mouth).
-            // Each older character is CHAR_SPACING further along the spline.
-            // Additionally, the newest char gets a small animated offset
-            // so it looks like it's sliding out from the mouth.
-            for (let i = charTrail.length - 1; i >= 0; i--) {
-                const ch = charTrail[i];
-                const reverseIdx = charTrail.length - 1 - i; // 0 for newest
-                const age = nowSec - ch.spawnTime;
-
-                // Distance along the spline in pixels
-                const dist = reverseIdx * CHAR_SPACING;
-                if (dist > totalSplineLength) {
-                    // Off the end of the spline — skip
-                    continue;
-                }
-
-                const t = arcLengthToT(dist);
-                const pos = getSplinePos(t);
-
-                // Add subtle noise perpendicular to the path
-                const noiseVal = noise(age * NOISE_FREQ, ch.seed) * NOISE_AMP;
-
-                // Age fraction [0, 1]
-                const ageFrac = age / CHAR_MAX_AGE;
-
-                // Opacity: fade in quickly, then fade out at the end
+                // Opacity
                 let alpha = 1.0;
-                if (age < FADE_IN_TIME) {
-                    alpha = age / FADE_IN_TIME;
-                } else if (ageFrac > 0.7) {
-                    alpha = 1.0 - (ageFrac - 0.7) / 0.3;
+                if (age < P.fadeInTime) {
+                    alpha = age / P.fadeInTime;
                 }
-                // Also fade if near the end of the spline
-                const splineFrac = dist / totalSplineLength;
-                if (splineFrac > 0.75) {
-                    alpha *= 1.0 - (splineFrac - 0.75) / 0.25;
+                if (t > 0.65) {
+                    alpha *= 1.0 - (t - 0.65) / 0.35;
                 }
                 alpha = Math.max(0, Math.min(1, alpha));
-
                 if (alpha <= 0) continue;
 
-                // Color: white → red as char ages
-                let r = 255, g = 255, b = 255;
-                if (ageFrac > COLOR_SHIFT_START) {
-                    const colorT = (ageFrac - COLOR_SHIFT_START) / (1.0 - COLOR_SHIFT_START);
-                    g = Math.round(255 * (1 - colorT * 0.85));
-                    b = Math.round(255 * (1 - colorT * 0.9));
-                }
+                // Color: continuous gradient from start color → end color over lifetime
+                const r = Math.round(lerp(P.colorStartR, P.colorEndR, t));
+                const g = Math.round(lerp(P.colorStartG, P.colorEndG, t));
+                const b = Math.round(lerp(P.colorStartB, P.colorEndB, t));
 
-                // Size: slight shrink for older chars
-                const scale = 1.0 - splineFrac * 0.25;
-                const size = CHAR_SIZE * scale;
+                // Size: slight shrink over life
+                const scale = 1.0 - t * 0.3;
+                const size = P.charSize * scale;
 
                 ctx.save();
                 ctx.globalAlpha = alpha;
                 ctx.font = `bold ${size}px Georgia, serif`;
                 ctx.fillStyle = `rgb(${r},${g},${b})`;
                 ctx.shadowColor = 'rgba(0,0,0,0.7)';
-                ctx.shadowBlur = 5;
+                ctx.shadowBlur = 4;
                 ctx.shadowOffsetX = 1;
                 ctx.shadowOffsetY = 1;
-                ctx.fillText(ch.char, pos.x, pos.y + noiseVal);
+                ctx.fillText(p.char, pos.x, pos.y + noiseVal);
                 ctx.restore();
             }
         }
@@ -521,7 +566,6 @@
 
         function animate(timestamp) {
             if (!running) return;
-
             syncCanvasSize();
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -535,14 +579,14 @@
                 updateSubtitle(audio.currentTime);
             }
 
-            renderCharTrail(timestamp);
+            renderParticles(timestamp);
 
             // Mouth dot
             if (hasFace) {
                 ctx.save();
-                ctx.globalAlpha = 0.25;
+                ctx.globalAlpha = 0.3;
                 ctx.beginPath();
-                ctx.arc(mouthX, mouthY, 5, 0, Math.PI * 2);
+                ctx.arc(mouthX, mouthY, 4, 0, Math.PI * 2);
                 ctx.fillStyle = '#ff88cc';
                 ctx.fill();
                 ctx.restore();
@@ -553,18 +597,15 @@
 
         // ─── Startup ───
         async function init() {
+            buildTweaksUI();
             try {
                 await Promise.all([loadLyrics(), initFaceLandmarker()]);
             } catch (e) {
                 log('Error loading: ' + e.message);
                 console.error(e);
             }
-            try {
-                await startCamera();
-            } catch (e) {
-                log('Camera error: ' + e.message);
-                console.error(e);
-            }
+            try { await startCamera(); }
+            catch (e) { log('Camera error: ' + e.message); console.error(e); }
             startBtn.disabled = false;
             startBtn.textContent = 'Click to Start';
             log('Ready');
@@ -573,10 +614,7 @@
         startBtn.addEventListener('click', () => {
             startScreen.style.display = 'none';
             running = true;
-            audio.play().catch(e => {
-                log('Audio play error: ' + e.message);
-                console.error(e);
-            });
+            audio.play().catch(e => { log('Audio error: ' + e.message); });
             requestAnimationFrame(animate);
             log('Playing...');
         });
