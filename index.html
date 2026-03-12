@@ -269,9 +269,14 @@
         let mouthX = 0, mouthY = 0;
         let smoothMouthX = 0, smoothMouthY = 0;
         let hasFace = false;
+        // Face orientation
+        let faceYaw       = 0;     // -1 = facing left, +1 = facing right (in screen space)
+        let smoothYaw     = 0;
+        let foreheadX     = 0, foreheadY = 0;
+        let smoothForeheadX = 0, smoothForeheadY = 0;
+        let faceWidth     = 0;     // approximate face width in pixels
 
-        // Each particle: { char, spawnTime, startX, startY, seed }
-        // startX/Y is the mouth position when the char was spawned (frozen at birth)
+        // Each particle: { char, spawnTime, startX, startY, seed, facingDir, headTopX, headTopY, spawnFaceWidth }
         let particles        = [];
         let lastSegmentIndex = -1;
         let charSpawnIndex   = 0;
@@ -374,18 +379,54 @@
                 const results = faceLandmarker.detectForVideo(video, ts);
                 if (results.faceLandmarks && results.faceLandmarks.length > 0) {
                     const lm = results.faceLandmarks[0];
+                    const W = canvas.width, H = canvas.height;
+
+                    // Mouth center
                     const upper = lm[13], lower = lm[14];
-                    const normX = 1.0 - (upper.x + lower.x) / 2;
-                    const normY = (upper.y + lower.y) / 2;
-                    const rawX = normX * canvas.width;
-                    const rawY = normY * canvas.height;
-                    if (!hasFace) { smoothMouthX = rawX; smoothMouthY = rawY; }
-                    else {
-                        smoothMouthX += (rawX - smoothMouthX) * (1 - P.mouthSmooth);
-                        smoothMouthY += (rawY - smoothMouthY) * (1 - P.mouthSmooth);
+                    const rawMouthX = (1.0 - (upper.x + lower.x) / 2) * W;
+                    const rawMouthY = ((upper.y + lower.y) / 2) * H;
+
+                    // Forehead / top of head (landmark 10)
+                    const rawFhX = (1.0 - lm[10].x) * W;
+                    const rawFhY = lm[10].y * H;
+
+                    // Face edges for yaw detection (mirrored)
+                    // 234 = right contour, 454 = left contour in MediaPipe space
+                    const rightEdge = lm[234]; // performer's right
+                    const leftEdge  = lm[454]; // performer's left
+                    const noseTip   = lm[1];
+                    // In normalized coords, compute how far nose is from face center
+                    const faceCenterX = (rightEdge.x + leftEdge.x) / 2;
+                    const rawFaceW = Math.abs(rightEdge.x - leftEdge.x);
+                    // Yaw: positive = nose is to the right of center (facing right in raw coords)
+                    // After mirroring: we flip the sign
+                    const rawYaw = rawFaceW > 0.001
+                        ? -((noseTip.x - faceCenterX) / (rawFaceW * 0.5))
+                        : 0;
+                    // Clamp to [-1, 1]
+                    const clampedYaw = Math.max(-1, Math.min(1, rawYaw));
+
+                    // Face width in pixels
+                    const rawFW = rawFaceW * W;
+
+                    // Smooth everything
+                    const sm = 1 - P.mouthSmooth;
+                    if (!hasFace) {
+                        smoothMouthX = rawMouthX; smoothMouthY = rawMouthY;
+                        smoothForeheadX = rawFhX; smoothForeheadY = rawFhY;
+                        smoothYaw = clampedYaw;
+                        faceWidth = rawFW;
+                    } else {
+                        smoothMouthX += (rawMouthX - smoothMouthX) * sm;
+                        smoothMouthY += (rawMouthY - smoothMouthY) * sm;
+                        smoothForeheadX += (rawFhX - smoothForeheadX) * sm;
+                        smoothForeheadY += (rawFhY - smoothForeheadY) * sm;
+                        smoothYaw += (clampedYaw - smoothYaw) * sm * 0.5; // extra smooth for yaw
+                        faceWidth += (rawFW - faceWidth) * sm;
                     }
-                    mouthX = smoothMouthX;
-                    mouthY = smoothMouthY;
+                    mouthX = smoothMouthX; mouthY = smoothMouthY;
+                    foreheadX = smoothForeheadX; foreheadY = smoothForeheadY;
+                    faceYaw = smoothYaw;
                     hasFace = true;
                 } else { hasFace = false; }
             } catch (e) { console.warn('Face detect error:', e); }
@@ -405,28 +446,44 @@
         }
 
         // ─── Get particle position ───
-        // Each particle has its own spline: from its birth mouth pos → fixed upper-left target
+        // Spline: starts offset from mouth in facing direction,
+        // arcs over the head, ends at upper screen area on the facing side
         function getParticlePos(p, t) {
             const W = canvas.width, H = canvas.height;
-            // Target: upper-left area of the screen (absolute)
-            const tx = W * P.targetX;
-            const ty = H * P.targetY;
-            // Vector from start to target
-            const dx = tx - p.startX;
-            const dy = ty - p.startY;
-            // Perpendicular direction (for curvature)
-            const len = Math.sqrt(dx*dx + dy*dy) || 1;
-            const perpX = -dy / len;
-            const perpY =  dx / len;
-            // Control points along the start→target vector with lateral offset
-            const curveOffset = len * P.cpCurve;
-            const cp1x = p.startX + dx * P.cpPull1 + perpX * curveOffset;
-            const cp1y = p.startY + dy * P.cpPull1 + perpY * curveOffset;
-            const cp2x = p.startX + dx * P.cpPull2 + perpX * curveOffset * 0.5;
-            const cp2y = p.startY + dy * P.cpPull2 + perpY * curveOffset * 0.5;
 
-            const x = cubicBezier(t, p.startX, cp1x, cp2x, tx);
-            const y = cubicBezier(t, p.startY, cp1y, cp2y, ty);
+            // Facing direction: +1 = facing right (spawn to the right), -1 = facing left
+            const dir = p.facingDir;
+
+            // Start point: offset from mouth in the facing direction
+            // so letters don't occlude the face
+            const offsetX = dir * p.spawnFaceWidth * 0.6;
+            const sx = p.startX + offsetX;
+            const sy = p.startY;
+
+            // Target: upper area on the side the face is looking toward
+            const tx = dir > 0
+                ? W * (1 - P.targetX)    // facing right → target upper-right
+                : W * P.targetX;          // facing left → target upper-left
+            const ty = H * P.targetY;
+
+            // CP1: go UP first (above the head) to clear the face
+            // Use the forehead position captured at spawn to route over the head
+            const aboveHeadY = p.headTopY - p.spawnFaceWidth * 0.4; // well above head
+            const cp1x = sx + (tx - sx) * P.cpPull1 + dir * p.spawnFaceWidth * 0.3;
+            const cp1y = Math.min(sy, aboveHeadY); // ensure we go up
+
+            // CP2: continue toward target, staying high
+            const cp2x = sx + (tx - sx) * P.cpPull2;
+            const cp2y = ty + (aboveHeadY - ty) * (1 - P.cpPull2);
+
+            // Apply curvature as lateral offset
+            const dx = tx - sx, dy = ty - sy;
+            const len = Math.sqrt(dx*dx + dy*dy) || 1;
+            const perpX = -dy / len, perpY = dx / len;
+            const curveOff = len * P.cpCurve;
+
+            const x = cubicBezier(t, sx, cp1x + perpX * curveOff, cp2x + perpX * curveOff * 0.5, tx);
+            const y = cubicBezier(t, sy, cp1y + perpY * curveOff, cp2y + perpY * curveOff * 0.5, ty);
             return { x, y };
         }
 
@@ -453,6 +510,10 @@
             const charsToSpawn = Math.min(text.length,
                 1 + Math.floor((elapsed / segDuration) * text.length));
             const now = performance.now() / 1000;
+            // Determine facing direction: if yaw is small (< 0.15), default to left (-1)
+            const dir = Math.abs(faceYaw) < 0.15
+                ? -1
+                : (faceYaw > 0 ? 1 : -1);
             while (charSpawnIndex < charsToSpawn && charSpawnIndex < text.length) {
                 particles.push({
                     char: text[charSpawnIndex],
@@ -460,6 +521,10 @@
                     startX: mouthX,
                     startY: mouthY,
                     seed: Math.random() * 100,
+                    facingDir: dir,
+                    headTopX: foreheadX,
+                    headTopY: foreheadY,
+                    spawnFaceWidth: faceWidth,
                 });
                 charSpawnIndex++;
             }
