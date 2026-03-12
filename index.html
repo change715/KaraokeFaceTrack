@@ -454,12 +454,22 @@
                 1 + Math.floor((elapsed / segDuration) * text.length));
             const now = performance.now() / 1000;
             while (charSpawnIndex < charsToSpawn && charSpawnIndex < text.length) {
+                // Random burst angle: biased toward the spline direction (upper-left)
+                // but with spread so it feels like an explosion from the mouth
+                const baseAngle = Math.atan2(
+                    canvas.height * P.targetY - mouthY,
+                    canvas.width * P.targetX - mouthX
+                );
+                const spread = (Math.random() - 0.5) * 1.2; // ±0.6 radians spread
+                const burstAngle = baseAngle + spread;
                 particles.push({
                     char: text[charSpawnIndex],
                     spawnTime: now,
                     startX: mouthX,
                     startY: mouthY,
                     seed: Math.random() * 100,
+                    burstDx: Math.cos(burstAngle),
+                    burstDy: Math.sin(burstAngle),
                 });
                 charSpawnIndex++;
             }
@@ -535,7 +545,27 @@
                 // then slow down and spread out — making words readable at the far end
                 const t = easeOutCubic(linearT);
 
-                const pos = getParticlePos(p, t);
+                const splinePos = getParticlePos(p, t);
+
+                // Burst phase: for the first ~8% of life, shoot outward from the mouth
+                // then smoothly blend into the spline path
+                const BURST_DURATION = 0.08; // fraction of lifetime
+                const BURST_DISTANCE = 80;   // max px the burst travels
+                let pos;
+                if (linearT < BURST_DURATION) {
+                    const burstT = linearT / BURST_DURATION; // 0→1 during burst
+                    const burstEased = 1 - Math.pow(1 - burstT, 2); // ease-out
+                    const burstX = p.startX + p.burstDx * BURST_DISTANCE * burstEased;
+                    const burstY = p.startY + p.burstDy * BURST_DISTANCE * burstEased;
+                    // Blend from burst position to spline position
+                    const blend = burstT * burstT; // ease-in blend toward spline
+                    pos = {
+                        x: lerp(burstX, splinePos.x, blend),
+                        y: lerp(burstY, splinePos.y, blend),
+                    };
+                } else {
+                    pos = splinePos;
+                }
 
                 // Noise: perpendicular wobble
                 const noiseVal = noise(age * P.noiseFreq, p.seed) * P.noiseAmp;
