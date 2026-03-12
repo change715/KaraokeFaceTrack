@@ -195,15 +195,15 @@
 
         // ─── Tweakable params ───
         const P = {
-            charSize:      42,
+            charSize:      80,
             charLifetime:  4.0,
             noiseAmp:      7,
             noiseFreq:     2.5,
             mouthSmooth:   0.8,
             fadeInTime:     0.12,
-            cpPull1:       0.50,
-            cpPull2:       0.80,
-            cpCurve:       0.20,
+            cpPull1:       0.11,
+            cpPull2:       0.64,
+            cpCurve:      -0.10,
             targetX:       0.08,
             targetY:       0.20,
             colorStartR: 255, colorStartG: 255, colorStartB: 255,
@@ -635,6 +635,19 @@
             audio.play().catch(e => { log('Audio error: ' + e.message); });
             requestAnimationFrame(animate);
             log('Playing...');
+        });
+
+        // ─── "1" key: toggle clean mode (hide UI + webcam, black background) ───
+        let cleanMode = false;
+        document.addEventListener('keydown', (e) => {
+            if (e.key === '1') {
+                cleanMode = !cleanMode;
+                video.style.display = cleanMode ? 'none' : '';
+                tweaksToggle.style.display = cleanMode ? 'none' : '';
+                tweaksPanel.classList.remove('open');
+                tweaksPanel.style.display = cleanMode ? 'none' : '';
+                statusEl.style.display = cleanMode ? 'none' : '';
+            }
         });
 
         init();
