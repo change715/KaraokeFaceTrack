@@ -301,10 +301,14 @@
             const raw  = await resp.json();
             lyricsData = raw.map((item, i) => {
                 const seg  = item.segments[0];
-                const text = seg.text || seg.finalWord || '';
+                // Use phoneticWord for particles (has stretched chars like "Haaa lle luuuuuu jaaaah")
+                // Use text or finalWord for the subtitle display
+                const particleText  = (seg.phoneticWord || seg.text || seg.finalWord || '').trim();
+                const subtitleText  = (seg.text || seg.finalWord || '').trim();
                 return {
                     index: i,
-                    text: text.trim(),
+                    particleText,
+                    subtitleText,
                     start: parseTime(seg.startTime),
                     end:   parseTime(seg.endTime),
                 };
@@ -442,12 +446,15 @@
                 charSpawnIndex = 0;
             }
             if (!currentSeg || !hasFace) return;
-            const text = currentSeg.text;
+            const text = currentSeg.particleText;
             if (!text || text.length === 0) return;
             const segDuration = currentSeg.end - currentSeg.start;
             if (segDuration <= 0) return;
             const elapsed = currentTime - currentSeg.start;
-            const charsToSpawn = Math.floor((elapsed / segDuration) * text.length);
+            // Distribute chars evenly: first char spawns immediately, last char at ~95% of segment
+            // Using (length) as divisor ensures all chars spawn before segment ends
+            const charsToSpawn = Math.min(text.length,
+                1 + Math.floor((elapsed / segDuration) * text.length));
             const now = performance.now() / 1000;
             while (charSpawnIndex < charsToSpawn && charSpawnIndex < text.length) {
                 particles.push({
@@ -477,7 +484,7 @@
             if (curIdx === -1) { subtitleBox.innerHTML = ''; return; }
 
             const seg = lyricsData[curIdx];
-            const text = seg.text;
+            const text = seg.subtitleText;
 
             if (currentTime < seg.start) {
                 // Upcoming — all dim
