@@ -151,10 +151,10 @@
             accent-color: #88aaff;
         }
         .tweak-row .val {
-            flex: 0 0 40px;
+            flex: 0 0 48px;
             text-align: right;
             opacity: 0.6;
-            font-size: 0.7rem;
+            font-size: 0.75rem;
             font-family: monospace;
         }
     </style>
@@ -199,16 +199,13 @@
             charLifetime:  4.0,
             noiseAmp:      7,
             noiseFreq:     2.5,
-            mouthSmooth:   0.3,
+            mouthSmooth:   0.8,
             fadeInTime:     0.12,
-            // Spline shape: control points as fraction of the vector from mouth→target
-            cpPull1:       0.33,   // how far along the path CP1 sits
-            cpPull2:       0.66,   // how far along the path CP2 sits
-            cpCurve:       0.25,   // lateral curvature (perpendicular offset)
-            // Target corner offset from top-left (in % of screen)
-            targetX:       0.05,
-            targetY:       0.05,
-            // Color: start and end hue
+            cpPull1:       0.50,
+            cpPull2:       0.80,
+            cpCurve:       0.20,
+            targetX:       0.08,
+            targetY:       0.20,
             colorStartR: 255, colorStartG: 255, colorStartB: 255,
             colorEndR: 220, colorEndG: 50, colorEndB: 50,
         };
@@ -484,11 +481,11 @@
             if (curIdx === -1) { subtitleBox.innerHTML = ''; return; }
 
             const seg = lyricsData[curIdx];
-            const text = seg.subtitleText;
+            const text = seg.particleText;
 
             if (currentTime < seg.start) {
                 // Upcoming — all dim
-                subtitleBox.innerHTML = `<span style="color:rgba(255,255,255,0.3)">${text}</span>`;
+                subtitleBox.innerHTML = `<span style="color:rgba(255,255,255,0.35)">${text}</span>`;
                 return;
             }
 
