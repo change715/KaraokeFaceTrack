@@ -73,35 +73,40 @@
         }
         #status {
             position: absolute;
-            bottom: 20px;
-            left: 20px;
-            font-size: 0.9rem;
-            opacity: 0.7;
+            top: 12px;
+            left: 12px;
+            font-size: 0.8rem;
+            opacity: 0.5;
             z-index: 150;
-            background: rgba(0,0,0,0.6);
-            padding: 4px 10px;
+            background: rgba(0,0,0,0.5);
+            padding: 3px 8px;
             border-radius: 4px;
         }
-        #lyrics-display {
+        /* ─── Subtitle bar ─── */
+        #subtitle-bar {
             position: absolute;
-            bottom: 60px;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 1.4rem;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: rgba(0, 0, 0, 0.75);
+            padding: 16px 30px;
             text-align: center;
-            opacity: 0.35;
-            max-width: 80%;
-            text-shadow: 0 0 10px rgba(0,0,0,0.8);
             z-index: 50;
             pointer-events: none;
+            font-size: 1.3rem;
+            line-height: 1.6;
+            min-height: 60px;
         }
+        #subtitle-bar .past    { color: rgba(140, 120, 220, 0.85); }
+        #subtitle-bar .current { color: #fff; }
+        #subtitle-bar .future  { color: rgba(255,255,255,0.35); }
     </style>
 </head>
 <body>
     <div id="container">
         <video id="webcam" autoplay playsinline muted></video>
         <canvas id="overlay"></canvas>
-        <div id="lyrics-display"></div>
+        <div id="subtitle-bar"></div>
         <div id="status">Loading...</div>
         <div id="startScreen">
             <h1>Karaoke Face Track</h1>
@@ -111,44 +116,56 @@
     </div>
 
     <script type="module">
-        // ─── MediaPipe imports ───
         import { FaceLandmarker, FilesetResolver } from
             "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/vision_bundle.mjs";
 
-        // ─── DOM refs ───
+        // ─── DOM ───
         const video       = document.getElementById('webcam');
         const canvas      = document.getElementById('overlay');
         const ctx         = canvas.getContext('2d');
         const statusEl    = document.getElementById('status');
-        const lyricsEl    = document.getElementById('lyrics-display');
+        const subtitleBar = document.getElementById('subtitle-bar');
         const startScreen = document.getElementById('startScreen');
         const startBtn    = document.getElementById('startBtn');
 
-        // ─── Audio setup ───
+        // ─── Audio ───
         const audio = new Audio('Hallelujah_-_Leonard_Cohen_Karaoke_Version_KaraFun.wav');
         audio.preload = 'auto';
 
         // ─── State ───
         let faceLandmarker   = null;
         let lyricsData       = [];
-        let activeChars      = [];
+        let running          = false;
+        let lastDetectTs     = -1;
         let mouthX = 0, mouthY = 0;
-        let hasFace          = false;
+        let smoothMouthX = 0, smoothMouthY = 0;
+        let hasFace = false;
+
+        // Character trail: array of { char, spawnTime, seed }
+        // Characters are placed along a shared spline from the mouth.
+        // The newest char is at the mouth end, oldest chars are further along the path.
+        let charTrail        = [];
         let lastSegmentIndex = -1;
         let charSpawnIndex   = 0;
-        let running          = false;
-        let lastDetectTs     = -1;   // for strictly increasing timestamps
 
         // ─── Config ───
-        const CHAR_LIFETIME  = 3.0;
-        const CHAR_SIZE      = 38;
-        const DRIFT_X        = -220;
-        const DRIFT_Y        = -280;
-        const NOISE_AMP      = 8;
-        const NOISE_FREQ     = 3.5;
-        const FADE_START     = 0.55;
-        const CHAR_SPACING   = 18;
-        const SPLINE_CURVE   = 0.3;
+        const CHAR_SIZE       = 42;       // base font size
+        const CHAR_SPACING    = 30;       // spacing between chars along the spline (px)
+        const CHAR_MAX_AGE    = 5.0;      // seconds before a char fully disappears
+        const FADE_IN_TIME    = 0.15;     // seconds to fade in
+        const COLOR_SHIFT_START = 0.3;    // fraction of max age when color starts shifting to red
+        const NOISE_AMP       = 6;        // vertical noise amplitude
+        const NOISE_FREQ      = 2.5;      // noise frequency
+        const MOUTH_SMOOTH    = 0.3;      // smoothing factor for mouth position (0=no smooth, 1=frozen)
+
+        // Spline control: cubic bezier from mouth to upper-left
+        // These are relative offsets from the mouth position
+        const SPLINE_CP1_X = -180;   // first control point
+        const SPLINE_CP1_Y = -120;
+        const SPLINE_CP2_X = -420;   // second control point
+        const SPLINE_CP2_Y = -350;
+        const SPLINE_END_X = -600;   // endpoint
+        const SPLINE_END_Y = -550;
 
         function log(msg) {
             console.log('[Karaoke]', msg);
@@ -190,11 +207,9 @@
             const vision = await FilesetResolver.forVisionTasks(
                 "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm"
             );
-
-            // Try GPU first, fall back to CPU
             for (const delegate of ["GPU", "CPU"]) {
                 try {
-                    log(`Trying face model with ${delegate}...`);
+                    log(`Trying face model (${delegate})...`);
                     faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
                         baseOptions: {
                             modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
@@ -208,7 +223,7 @@
                     log(`Face model loaded (${delegate})`);
                     return;
                 } catch (e) {
-                    console.warn(`${delegate} delegate failed:`, e);
+                    console.warn(`${delegate} failed:`, e);
                     if (delegate === "CPU") throw e;
                 }
             }
@@ -221,7 +236,6 @@
                 video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' }
             });
             video.srcObject = stream;
-
             await new Promise((resolve, reject) => {
                 video.onloadedmetadata = resolve;
                 video.onerror = reject;
@@ -231,7 +245,6 @@
             log('Camera ready');
         }
 
-        // ─── Resize canvas to match its CSS layout size ───
         function syncCanvasSize() {
             const w = canvas.clientWidth;
             const h = canvas.clientHeight;
@@ -244,8 +257,6 @@
         // ─── Detect face ───
         function detectFace(timestamp) {
             if (!faceLandmarker) return;
-
-            // detectForVideo requires strictly increasing integer timestamps
             const ts = Math.round(timestamp);
             if (ts <= lastDetectTs) return;
             lastDetectTs = ts;
@@ -256,11 +267,20 @@
                     const lm = results.faceLandmarks[0];
                     const upper = lm[13];
                     const lower = lm[14];
-                    // Mirror X because video is CSS-mirrored
                     const normX = 1.0 - (upper.x + lower.x) / 2;
                     const normY = (upper.y + lower.y) / 2;
-                    mouthX = normX * canvas.width;
-                    mouthY = normY * canvas.height;
+                    const rawX = normX * canvas.width;
+                    const rawY = normY * canvas.height;
+                    // Smooth mouth position to avoid jitter
+                    if (!hasFace) {
+                        smoothMouthX = rawX;
+                        smoothMouthY = rawY;
+                    } else {
+                        smoothMouthX += (rawX - smoothMouthX) * (1 - MOUTH_SMOOTH);
+                        smoothMouthY += (rawY - smoothMouthY) * (1 - MOUTH_SMOOTH);
+                    }
+                    mouthX = smoothMouthX;
+                    mouthY = smoothMouthY;
                     hasFace = true;
                 } else {
                     hasFace = false;
@@ -277,7 +297,66 @@
                  + Math.sin(t * 7.7 + seed * 0.3) * 0.2;
         }
 
-        // ─── Spawn characters for the current lyric segment ───
+        // ─── Cubic bezier evaluation ───
+        function cubicBezier(t, p0, p1, p2, p3) {
+            const u  = 1 - t;
+            const u2 = u * u;
+            const u3 = u2 * u;
+            const t2 = t * t;
+            const t3 = t2 * t;
+            return u3 * p0 + 3 * u2 * t * p1 + 3 * u * t2 * p2 + t3 * p3;
+        }
+
+        // ─── Get position on the spline for a given distance from the mouth ───
+        // dist: 0 = at mouth, 1 = at the far end of the spline
+        function getSplinePos(dist) {
+            const t = Math.min(dist, 1.0);
+            const x = cubicBezier(t, mouthX, mouthX + SPLINE_CP1_X, mouthX + SPLINE_CP2_X, mouthX + SPLINE_END_X);
+            const y = cubicBezier(t, mouthY, mouthY + SPLINE_CP1_Y, mouthY + SPLINE_CP2_Y, mouthY + SPLINE_END_Y);
+            return { x, y };
+        }
+
+        // ─── Approximate arc length of spline for even spacing ───
+        // Pre-compute a lookup table each frame (since mouth moves)
+        const SPLINE_SAMPLES = 100;
+        let splineLengthTable = []; // { t, len } cumulative arc length
+        let totalSplineLength = 0;
+
+        function buildSplineLengthTable() {
+            splineLengthTable = [{ t: 0, len: 0 }];
+            let prevPos = getSplinePos(0);
+            let cumLen = 0;
+            for (let i = 1; i <= SPLINE_SAMPLES; i++) {
+                const t = i / SPLINE_SAMPLES;
+                const pos = getSplinePos(t);
+                const dx = pos.x - prevPos.x;
+                const dy = pos.y - prevPos.y;
+                cumLen += Math.sqrt(dx * dx + dy * dy);
+                splineLengthTable.push({ t, len: cumLen });
+                prevPos = pos;
+            }
+            totalSplineLength = cumLen;
+        }
+
+        // Given a desired arc-length distance, return the parameter t
+        function arcLengthToT(targetLen) {
+            if (targetLen <= 0) return 0;
+            if (targetLen >= totalSplineLength) return 1;
+            // Binary search
+            let lo = 0, hi = SPLINE_SAMPLES;
+            while (lo < hi - 1) {
+                const mid = (lo + hi) >> 1;
+                if (splineLengthTable[mid].len < targetLen) lo = mid;
+                else hi = mid;
+            }
+            const segStart = splineLengthTable[lo];
+            const segEnd   = splineLengthTable[hi];
+            const segLen   = segEnd.len - segStart.len;
+            const frac     = segLen > 0 ? (targetLen - segStart.len) / segLen : 0;
+            return segStart.t + frac * (segEnd.t - segStart.t);
+        }
+
+        // ─── Spawn characters ───
         function updateLyricSpawning(currentTime) {
             let currentSeg    = null;
             let currentSegIdx = -1;
@@ -289,12 +368,7 @@
                 }
             }
 
-            if (currentSeg) {
-                lyricsEl.textContent = currentSeg.text;
-            } else {
-                lyricsEl.textContent = '';
-            }
-
+            // Reset spawn counter on segment change
             if (currentSegIdx !== lastSegmentIndex) {
                 lastSegmentIndex = currentSegIdx;
                 charSpawnIndex   = 0;
@@ -310,77 +384,140 @@
             const elapsed      = currentTime - currentSeg.start;
             const charsToSpawn = Math.floor((elapsed / segDuration) * text.length);
 
+            const now = performance.now() / 1000;
             while (charSpawnIndex < charsToSpawn && charSpawnIndex < text.length) {
-                const ch = text[charSpawnIndex];
-                const jitterX = (Math.random() - 0.5) * 6;
-                const jitterY = (Math.random() - 0.5) * 6;
-                activeChars.push({
-                    char: ch,
-                    birthTime: performance.now() / 1000,
-                    startX: mouthX + jitterX,
-                    startY: mouthY + jitterY,
+                charTrail.push({
+                    char: text[charSpawnIndex],
+                    spawnTime: now,
                     seed: Math.random() * 100,
-                    index: charSpawnIndex,
-                    offsetX: charSpawnIndex * CHAR_SPACING * 0.15,
                 });
                 charSpawnIndex++;
             }
         }
 
-        // ─── Char position along spline ───
-        function getCharPos(ch, t) {
-            const sx = ch.startX;
-            const sy = ch.startY;
-            const cx = sx + DRIFT_X * SPLINE_CURVE + ch.offsetX;
-            const cy = sy + DRIFT_Y * 0.6;
-            const ex = sx + DRIFT_X + ch.offsetX * 2;
-            const ey = sy + DRIFT_Y;
+        // ─── Update subtitle bar ───
+        function updateSubtitle(currentTime) {
+            // Find current segment index
+            let curIdx = -1;
+            for (let i = 0; i < lyricsData.length; i++) {
+                if (currentTime >= lyricsData[i].start && currentTime < lyricsData[i].end) {
+                    curIdx = i;
+                    break;
+                }
+            }
+            // If between segments, find the next one
+            if (curIdx === -1) {
+                for (let i = 0; i < lyricsData.length; i++) {
+                    if (currentTime < lyricsData[i].start) {
+                        curIdx = i;
+                        break;
+                    }
+                }
+            }
 
-            const u = 1 - t;
-            const x = u * u * sx + 2 * u * t * cx + t * t * ex;
-            const y = u * u * sy + 2 * u * t * cy + t * t * ey;
-            const noiseVal = noise(t * NOISE_FREQ, ch.seed) * NOISE_AMP;
+            // Show a window of segments around current
+            const WINDOW = 2;
+            const startIdx = Math.max(0, (curIdx === -1 ? 0 : curIdx) - WINDOW);
+            const endIdx   = Math.min(lyricsData.length, (curIdx === -1 ? 0 : curIdx) + WINDOW + 1);
 
-            return { x, y: y + noiseVal };
+            let html = '';
+            for (let i = startIdx; i < endIdx; i++) {
+                const seg = lyricsData[i];
+                let cls;
+                if (currentTime >= seg.end) {
+                    cls = 'past';
+                } else if (currentTime >= seg.start) {
+                    cls = 'current';
+                } else {
+                    cls = 'future';
+                }
+                html += `<span class="${cls}">${seg.text} </span>`;
+            }
+            subtitleBar.innerHTML = html;
         }
 
-        // ─── Render floating chars ───
-        function renderChars(nowMs) {
+        // ─── Render character trail along the spline ───
+        function renderCharTrail(nowMs) {
             const nowSec = nowMs / 1000;
-            activeChars = activeChars.filter(ch => (nowSec - ch.birthTime) < CHAR_LIFETIME);
 
-            for (const ch of activeChars) {
-                const age = nowSec - ch.birthTime;
-                const t   = Math.min(age / CHAR_LIFETIME, 1.0);
-                const pos = getCharPos(ch, t);
+            // Remove chars that are too old
+            charTrail = charTrail.filter(ch => (nowSec - ch.spawnTime) < CHAR_MAX_AGE);
 
+            if (!hasFace || charTrail.length === 0) return;
+
+            // Build arc-length table for current mouth position
+            buildSplineLengthTable();
+
+            // Place characters along the spline:
+            // The newest character (last in array) is at distance 0 (the mouth).
+            // Each older character is CHAR_SPACING further along the spline.
+            // Additionally, the newest char gets a small animated offset
+            // so it looks like it's sliding out from the mouth.
+            for (let i = charTrail.length - 1; i >= 0; i--) {
+                const ch = charTrail[i];
+                const reverseIdx = charTrail.length - 1 - i; // 0 for newest
+                const age = nowSec - ch.spawnTime;
+
+                // Distance along the spline in pixels
+                const dist = reverseIdx * CHAR_SPACING;
+                if (dist > totalSplineLength) {
+                    // Off the end of the spline — skip
+                    continue;
+                }
+
+                const t = arcLengthToT(dist);
+                const pos = getSplinePos(t);
+
+                // Add subtle noise perpendicular to the path
+                const noiseVal = noise(age * NOISE_FREQ, ch.seed) * NOISE_AMP;
+
+                // Age fraction [0, 1]
+                const ageFrac = age / CHAR_MAX_AGE;
+
+                // Opacity: fade in quickly, then fade out at the end
                 let alpha = 1.0;
-                if (t < 0.05) {
-                    alpha = t / 0.05;
-                } else if (t > FADE_START) {
-                    alpha = 1.0 - (t - FADE_START) / (1.0 - FADE_START);
+                if (age < FADE_IN_TIME) {
+                    alpha = age / FADE_IN_TIME;
+                } else if (ageFrac > 0.7) {
+                    alpha = 1.0 - (ageFrac - 0.7) / 0.3;
+                }
+                // Also fade if near the end of the spline
+                const splineFrac = dist / totalSplineLength;
+                if (splineFrac > 0.75) {
+                    alpha *= 1.0 - (splineFrac - 0.75) / 0.25;
                 }
                 alpha = Math.max(0, Math.min(1, alpha));
 
-                const scale = 1.0 - t * 0.3;
-                const size  = CHAR_SIZE * scale;
+                if (alpha <= 0) continue;
+
+                // Color: white → red as char ages
+                let r = 255, g = 255, b = 255;
+                if (ageFrac > COLOR_SHIFT_START) {
+                    const colorT = (ageFrac - COLOR_SHIFT_START) / (1.0 - COLOR_SHIFT_START);
+                    g = Math.round(255 * (1 - colorT * 0.85));
+                    b = Math.round(255 * (1 - colorT * 0.9));
+                }
+
+                // Size: slight shrink for older chars
+                const scale = 1.0 - splineFrac * 0.25;
+                const size = CHAR_SIZE * scale;
 
                 ctx.save();
                 ctx.globalAlpha = alpha;
                 ctx.font = `bold ${size}px Georgia, serif`;
-                ctx.fillStyle = '#fff';
-                ctx.shadowColor = 'rgba(0,0,0,0.8)';
-                ctx.shadowBlur = 6;
-                ctx.shadowOffsetX = 2;
-                ctx.shadowOffsetY = 2;
-                ctx.fillText(ch.char, pos.x, pos.y);
+                ctx.fillStyle = `rgb(${r},${g},${b})`;
+                ctx.shadowColor = 'rgba(0,0,0,0.7)';
+                ctx.shadowBlur = 5;
+                ctx.shadowOffsetX = 1;
+                ctx.shadowOffsetY = 1;
+                ctx.fillText(ch.char, pos.x, pos.y + noiseVal);
                 ctx.restore();
             }
         }
 
         // ─── Main loop ───
         let lastFaceDetect = 0;
-        const FACE_DETECT_INTERVAL = 50; // ~20fps for detection (lighter)
+        const FACE_DETECT_INTERVAL = 50;
 
         function animate(timestamp) {
             if (!running) return;
@@ -395,17 +532,18 @@
 
             if (!audio.paused) {
                 updateLyricSpawning(audio.currentTime);
+                updateSubtitle(audio.currentTime);
             }
 
-            renderChars(timestamp);
+            renderCharTrail(timestamp);
 
-            // Subtle mouth indicator
+            // Mouth dot
             if (hasFace) {
                 ctx.save();
-                ctx.globalAlpha = 0.15;
+                ctx.globalAlpha = 0.25;
                 ctx.beginPath();
-                ctx.arc(mouthX, mouthY, 8, 0, Math.PI * 2);
-                ctx.fillStyle = '#fff';
+                ctx.arc(mouthX, mouthY, 5, 0, Math.PI * 2);
+                ctx.fillStyle = '#ff88cc';
                 ctx.fill();
                 ctx.restore();
             }
@@ -416,21 +554,17 @@
         // ─── Startup ───
         async function init() {
             try {
-                // Load lyrics and face model in parallel
                 await Promise.all([loadLyrics(), initFaceLandmarker()]);
             } catch (e) {
-                log('Error loading models: ' + e.message);
+                log('Error loading: ' + e.message);
                 console.error(e);
-                // Continue anyway — camera/lyrics may still work
             }
-
             try {
                 await startCamera();
             } catch (e) {
                 log('Camera error: ' + e.message);
                 console.error(e);
             }
-
             startBtn.disabled = false;
             startBtn.textContent = 'Click to Start';
             log('Ready');
