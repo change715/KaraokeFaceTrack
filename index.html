@@ -269,9 +269,10 @@
         let mouthX = 0, mouthY = 0;
         let smoothMouthX = 0, smoothMouthY = 0;
         let hasFace = false;
+        let faceYaw = 0;       // -1 = facing left, +1 = facing right (screen space)
+        let smoothYaw = 0;
 
-        // Each particle: { char, spawnTime, startX, startY, seed }
-        // startX/Y is the mouth position when the char was spawned (frozen at birth)
+        // Each particle: { char, spawnTime, startX, startY, seed, burstDx, burstDy }
         let particles        = [];
         let lastSegmentIndex = -1;
         let charSpawnIndex   = 0;
@@ -379,13 +380,28 @@
                     const normY = (upper.y + lower.y) / 2;
                     const rawX = normX * canvas.width;
                     const rawY = normY * canvas.height;
-                    if (!hasFace) { smoothMouthX = rawX; smoothMouthY = rawY; }
-                    else {
-                        smoothMouthX += (rawX - smoothMouthX) * (1 - P.mouthSmooth);
-                        smoothMouthY += (rawY - smoothMouthY) * (1 - P.mouthSmooth);
+
+                    // Face yaw: nose position relative to face edges
+                    const rightEdge = lm[234], leftEdge = lm[454], nose = lm[1];
+                    const faceCX = (rightEdge.x + leftEdge.x) / 2;
+                    const faceW = Math.abs(rightEdge.x - leftEdge.x);
+                    const rawYaw = faceW > 0.001
+                        ? -((nose.x - faceCX) / (faceW * 0.5))  // negated for mirror
+                        : 0;
+                    const clampedYaw = Math.max(-1, Math.min(1, rawYaw));
+
+                    const sm = 1 - P.mouthSmooth;
+                    if (!hasFace) {
+                        smoothMouthX = rawX; smoothMouthY = rawY;
+                        smoothYaw = clampedYaw;
+                    } else {
+                        smoothMouthX += (rawX - smoothMouthX) * sm;
+                        smoothMouthY += (rawY - smoothMouthY) * sm;
+                        smoothYaw += (clampedYaw - smoothYaw) * sm * 0.5;
                     }
                     mouthX = smoothMouthX;
                     mouthY = smoothMouthY;
+                    faceYaw = smoothYaw;
                     hasFace = true;
                 } else { hasFace = false; }
             } catch (e) { console.warn('Face detect error:', e); }
@@ -454,13 +470,12 @@
                 1 + Math.floor((elapsed / segDuration) * text.length));
             const now = performance.now() / 1000;
             while (charSpawnIndex < charsToSpawn && charSpawnIndex < text.length) {
-                // Random burst angle: biased toward the spline direction (upper-left)
-                // but with spread so it feels like an explosion from the mouth
-                const baseAngle = Math.atan2(
-                    canvas.height * P.targetY - mouthY,
-                    canvas.width * P.targetX - mouthX
-                );
-                const spread = (Math.random() - 0.5) * 1.2; // ±0.6 radians spread
+                // Burst direction based on face yaw:
+                // Facing right → burst right (angle ~0), facing left → burst left (angle ~PI)
+                // Always slightly upward, with random spread
+                const facingRight = faceYaw > 0;
+                const baseAngle = facingRight ? -0.3 : (Math.PI + 0.3); // slight upward tilt
+                const spread = (Math.random() - 0.5) * 0.8; // ±0.4 radians
                 const burstAngle = baseAngle + spread;
                 particles.push({
                     char: text[charSpawnIndex],
