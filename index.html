@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Karaoke Face Track</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #000;
+            overflow: hidden;
+            font-family: 'Georgia', serif;
+            color: #fff;
+        }
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #webcam {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+        }
+        #overlay {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+        }
+        #startScreen {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0,0,0,0.85);
+            z-index: 100;
+            cursor: pointer;
+        }
+        #startScreen h1 {
+            font-size: 3rem;
+            margin-bottom: 0.5rem;
+            text-shadow: 0 0 30px rgba(255,200,100,0.5);
+        }
+        #startScreen p {
+            font-size: 1.3rem;
+            opacity: 0.7;
+            margin-bottom: 2rem;
+        }
+        #startBtn {
+            font-size: 1.5rem;
+            padding: 1rem 3rem;
+            border: 2px solid rgba(255,255,255,0.5);
+            background: rgba(255,255,255,0.1);
+            color: #fff;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-family: 'Georgia', serif;
+        }
+        #startBtn:hover {
+            background: rgba(255,255,255,0.25);
+            border-color: #fff;
+        }
+        #status {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            font-size: 0.9rem;
+            opacity: 0.5;
+            z-index: 50;
+        }
+        #lyrics-display {
+            position: absolute;
+            bottom: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 1.4rem;
+            text-align: center;
+            opacity: 0.35;
+            max-width: 80%;
+            text-shadow: 0 0 10px rgba(0,0,0,0.8);
+            z-index: 50;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <video id="webcam" autoplay playsinline></video>
+        <canvas id="overlay"></canvas>
+        <div id="lyrics-display"></div>
+        <div id="status">Loading...</div>
+        <div id="startScreen">
+            <h1>Karaoke Face Track</h1>
+            <p>Hallelujah &mdash; Leonard Cohen</p>
+            <button id="startBtn">Click to Start</button>
+        </div>
+    </div>
+
+    <script type="module">
+        // ─── MediaPipe imports ───
+        import { FaceLandmarker, FilesetResolver } from
+            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/vision_bundle.mjs";
+
+        // ─── DOM refs ───
+        const video    = document.getElementById('webcam');
+        const canvas   = document.getElementById('overlay');
+        const ctx      = canvas.getContext('2d');
+        const statusEl = document.getElementById('status');
+        const lyricsEl = document.getElementById('lyrics-display');
+        const startScreen = document.getElementById('startScreen');
+        const startBtn = document.getElementById('startBtn');
+
+        // ─── Audio setup ───
+        const audio = new Audio('Hallelujah_-_Leonard_Cohen_Karaoke_Version_KaraFun.wav');
+        audio.preload = 'auto';
+
+        // ─── State ───
+        let faceLandmarker = null;
+        let lyricsData     = [];
+        let activeChars    = [];   // characters currently floating
+        let mouthX = 0, mouthY = 0;
+        let hasFace = false;
+        let lastSegmentIndex = -1;
+        let charSpawnIndex   = 0;  // which char in current segment we've spawned up to
+        let running = false;
+        let videoWidth = 0, videoHeight = 0;
+
+        // ─── Config ───
+        const CHAR_LIFETIME  = 3.0;    // seconds each character lives
+        const CHAR_SIZE      = 38;
+        const DRIFT_X        = -220;   // total X drift over lifetime (negative = left)
+        const DRIFT_Y        = -280;   // total Y drift over lifetime (negative = up)
+        const NOISE_AMP      = 8;      // amplitude of vertical noise
+        const NOISE_FREQ     = 3.5;    // frequency of noise oscillation
+        const FADE_START     = 0.55;   // fraction of lifetime when fade begins
+        const CHAR_SPACING   = 18;     // horizontal spacing between chars in the stream
+        const SPLINE_CURVE   = 0.3;    // how much the path curves (quadratic control point)
+
+        // ─── Parse time format "M.SS.F" → seconds ───
+        function parseTime(timeStr) {
+            const cleaned = timeStr.replace(/\s/g, '');
+            const parts = cleaned.split('.');
+            if (parts.length < 3) return 0;
+            const minutes = parseInt(parts[0], 10) || 0;
+            const seconds = parseInt(parts[1], 10) || 0;
+            const tenths  = parseInt(parts[2], 10) || 0;
+            return minutes * 60 + seconds + tenths * 0.1;
+        }
+
+        // ─── Load lyrics ───
+        async function loadLyrics() {
+            const resp = await fetch('Hallelujah.json');
+            const raw  = await resp.json();
+            lyricsData = raw.map((item, i) => {
+                const seg = item.segments[0];
+                const text = seg.text || seg.finalWord || '';
+                return {
+                    index: i,
+                    text: text.trim(),
+                    start: parseTime(seg.startTime),
+                    end:   parseTime(seg.endTime),
+                };
+            });
+        }
+
+        // ─── Init MediaPipe ───
+        async function initFaceLandmarker() {
+            statusEl.textContent = 'Loading face model...';
+            const vision = await FilesetResolver.forVisionTasks(
+                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm"
+            );
+            faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+                baseOptions: {
+                    modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+                    delegate: "GPU"
+                },
+                runningMode: "VIDEO",
+                numFaces: 1,
+                outputFaceBlendshapes: false,
+                outputFacialTransformationMatrixes: false,
+            });
+            statusEl.textContent = 'Face model loaded';
+        }
+
+        // ─── Start webcam ───
+        async function startCamera() {
+            statusEl.textContent = 'Starting camera...';
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' }
+            });
+            video.srcObject = stream;
+            await new Promise(r => video.onloadedmetadata = r);
+            await video.play();
+            videoWidth  = video.videoWidth;
+            videoHeight = video.videoHeight;
+            canvas.width  = canvas.clientWidth;
+            canvas.height = canvas.clientHeight;
+            statusEl.textContent = 'Camera ready';
+        }
+
+        // ─── Detect face and extract mouth position ───
+        function detectFace(timeMs) {
+            if (!faceLandmarker) return;
+            const results = faceLandmarker.detectForVideo(video, timeMs);
+            if (results.faceLandmarks && results.faceLandmarks.length > 0) {
+                const landmarks = results.faceLandmarks[0];
+                // Landmark 13 = upper lip center, 14 = lower lip center
+                // Use midpoint for mouth center
+                const upper = landmarks[13];
+                const lower = landmarks[14];
+                // MediaPipe gives normalized coords [0,1], we mirror X because video is mirrored
+                const normX = 1.0 - (upper.x + lower.x) / 2;
+                const normY = (upper.y + lower.y) / 2;
+                mouthX = normX * canvas.width;
+                mouthY = normY * canvas.height;
+                hasFace = true;
+            } else {
+                hasFace = false;
+            }
+        }
+
+        // ─── Simple pseudo-noise using sin combinations ───
+        function noise(t, seed) {
+            return Math.sin(t * 2.1 + seed * 1.7) * 0.5
+                 + Math.sin(t * 4.3 + seed * 3.1) * 0.3
+                 + Math.sin(t * 7.7 + seed * 0.3) * 0.2;
+        }
+
+        // ─── Spawn characters for the current lyric segment ───
+        function updateLyricSpawning(currentTime) {
+            // Find current segment
+            let currentSeg = null;
+            let currentSegIdx = -1;
+            for (let i = 0; i < lyricsData.length; i++) {
+                if (currentTime >= lyricsData[i].start && currentTime < lyricsData[i].end) {
+                    currentSeg = lyricsData[i];
+                    currentSegIdx = i;
+                    break;
+                }
+            }
+
+            // Show subtitle
+            if (currentSeg) {
+                lyricsEl.textContent = currentSeg.text;
+            }
+
+            // Reset spawn counter if segment changed
+            if (currentSegIdx !== lastSegmentIndex) {
+                lastSegmentIndex = currentSegIdx;
+                charSpawnIndex = 0;
+            }
+
+            if (!currentSeg || !hasFace) return;
+
+            const text = currentSeg.text;
+            if (!text || text.length === 0) return;
+
+            const segDuration = currentSeg.end - currentSeg.start;
+            const elapsed = currentTime - currentSeg.start;
+            const charsToSpawn = Math.floor((elapsed / segDuration) * text.length);
+
+            // Spawn any characters we haven't spawned yet
+            while (charSpawnIndex < charsToSpawn && charSpawnIndex < text.length) {
+                const ch = text[charSpawnIndex];
+                // Stagger the spawn origin slightly so chars don't pile on the same pixel
+                const jitterX = (Math.random() - 0.5) * 6;
+                const jitterY = (Math.random() - 0.5) * 6;
+                activeChars.push({
+                    char: ch,
+                    birthTime: performance.now() / 1000,
+                    startX: mouthX + jitterX,
+                    startY: mouthY + jitterY,
+                    seed: Math.random() * 100,
+                    index: charSpawnIndex,
+                    // Give sequential chars slightly different paths so they form a readable line
+                    offsetX: charSpawnIndex * CHAR_SPACING * 0.15,
+                    offsetY: 0,
+                });
+                charSpawnIndex++;
+            }
+        }
+
+        // ─── Compute character position along spline path ───
+        function getCharPos(ch, t) {
+            // t goes from 0 (just spawned) to 1 (end of life)
+            // Quadratic bezier: start → control → end
+            const sx = ch.startX;
+            const sy = ch.startY;
+            // Control point: mostly up
+            const cx = sx + DRIFT_X * SPLINE_CURVE + ch.offsetX;
+            const cy = sy + DRIFT_Y * 0.6;
+            // End point
+            const ex = sx + DRIFT_X + ch.offsetX * 2;
+            const ey = sy + DRIFT_Y;
+
+            const u = 1 - t;
+            const x = u * u * sx + 2 * u * t * cx + t * t * ex;
+            const y = u * u * sy + 2 * u * t * cy + t * t * ey;
+
+            // Add noise
+            const noiseVal = noise(t * NOISE_FREQ, ch.seed) * NOISE_AMP;
+
+            return { x, y: y + noiseVal };
+        }
+
+        // ─── Render all active characters ───
+        function renderChars(now) {
+            const nowSec = now / 1000;
+            // Remove expired chars
+            activeChars = activeChars.filter(ch => (nowSec - ch.birthTime) < CHAR_LIFETIME);
+
+            for (const ch of activeChars) {
+                const age = nowSec - ch.birthTime;
+                const t = Math.min(age / CHAR_LIFETIME, 1.0);
+                const pos = getCharPos(ch, t);
+
+                // Calculate opacity
+                let alpha = 1.0;
+                if (t < 0.05) {
+                    alpha = t / 0.05; // fade in
+                } else if (t > FADE_START) {
+                    alpha = 1.0 - (t - FADE_START) / (1.0 - FADE_START);
+                }
+                alpha = Math.max(0, Math.min(1, alpha));
+
+                // Scale down slightly as they age
+                const scale = 1.0 - t * 0.3;
+                const size = CHAR_SIZE * scale;
+
+                // Draw character
+                ctx.save();
+                ctx.globalAlpha = alpha;
+                ctx.font = `bold ${size}px Georgia, serif`;
+                ctx.fillStyle = '#fff';
+                ctx.shadowColor = 'rgba(0,0,0,0.8)';
+                ctx.shadowBlur = 6;
+                ctx.shadowOffsetX = 2;
+                ctx.shadowOffsetY = 2;
+                ctx.fillText(ch.char, pos.x, pos.y);
+                ctx.restore();
+            }
+        }
+
+        // ─── Main animation loop ───
+        let lastFaceDetect = 0;
+        const FACE_DETECT_INTERVAL = 33; // ~30fps for face detection
+
+        function animate(timestamp) {
+            if (!running) return;
+
+            // Resize canvas if needed
+            if (canvas.width !== canvas.clientWidth || canvas.height !== canvas.clientHeight) {
+                canvas.width  = canvas.clientWidth;
+                canvas.height = canvas.clientHeight;
+            }
+
+            // Clear
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Run face detection at interval
+            if (timestamp - lastFaceDetect > FACE_DETECT_INTERVAL) {
+                detectFace(timestamp);
+                lastFaceDetect = timestamp;
+            }
+
+            // Spawn characters based on audio time
+            if (!audio.paused) {
+                updateLyricSpawning(audio.currentTime);
+            }
+
+            // Render floating characters
+            renderChars(timestamp);
+
+            // Draw subtle mouth indicator when face detected
+            if (hasFace) {
+                ctx.save();
+                ctx.globalAlpha = 0.15;
+                ctx.beginPath();
+                ctx.arc(mouthX, mouthY, 8, 0, Math.PI * 2);
+                ctx.fillStyle = '#fff';
+                ctx.fill();
+                ctx.restore();
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        // ─── Window resize handler ───
+        window.addEventListener('resize', () => {
+            canvas.width  = canvas.clientWidth;
+            canvas.height = canvas.clientHeight;
+        });
+
+        // ─── Startup ───
+        async function init() {
+            await Promise.all([loadLyrics(), initFaceLandmarker()]);
+            await startCamera();
+            statusEl.textContent = 'Ready — click to start';
+        }
+
+        startBtn.addEventListener('click', async () => {
+            startScreen.style.display = 'none';
+            running = true;
+            audio.play();
+            requestAnimationFrame(animate);
+        });
+
+        init().catch(err => {
+            statusEl.textContent = 'Error: ' + err.message;
+            console.error(err);
+        });
+    </script>
+</body>
+</html>
