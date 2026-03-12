@@ -540,13 +540,15 @@
                 // Noise: perpendicular wobble
                 const noiseVal = noise(age * P.noiseFreq, p.seed) * P.noiseAmp;
 
-                // Opacity: fade in, then fade out at end
+                // Opacity: fade in, then fade out well before reaching spline end
                 let alpha = 1.0;
                 if (age < P.fadeInTime) {
                     alpha = age / P.fadeInTime;
                 }
-                if (linearT > 0.65) {
-                    alpha *= 1.0 - (linearT - 0.65) / 0.35;
+                // Fade based on eased spline position — chars disappear before
+                // they pile up at the endpoint
+                if (t > 0.55) {
+                    alpha *= 1.0 - (t - 0.55) / 0.45;
                 }
                 alpha = Math.max(0, Math.min(1, alpha));
                 if (alpha <= 0) continue;
