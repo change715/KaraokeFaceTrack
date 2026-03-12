@@ -118,7 +118,7 @@
             border: 1px solid rgba(255,255,255,0.2);
             border-radius: 10px;
             padding: 16px 20px;
-            width: 300px;
+            width: 380px;
             max-height: 80vh;
             overflow-y: auto;
             display: none;
@@ -517,6 +517,11 @@
         // ─── Lerp helper ───
         function lerp(a, b, t) { return a + (b - a) * t; }
 
+        // ─── Ease-out: fast start, slow finish (chars shoot out then drift) ───
+        function easeOutCubic(t) {
+            return 1 - Math.pow(1 - t, 3);
+        }
+
         // ─── Render particles ───
         function renderParticles(nowMs) {
             const nowSec = nowMs / 1000;
@@ -524,31 +529,38 @@
 
             for (const p of particles) {
                 const age = nowSec - p.spawnTime;
-                const t = Math.min(age / P.charLifetime, 1.0); // 0→1 along spline
+                const linearT = Math.min(age / P.charLifetime, 1.0);
+
+                // Ease-out: particles shoot forward from the mouth quickly,
+                // then slow down and spread out — making words readable at the far end
+                const t = easeOutCubic(linearT);
 
                 const pos = getParticlePos(p, t);
 
                 // Noise: perpendicular wobble
                 const noiseVal = noise(age * P.noiseFreq, p.seed) * P.noiseAmp;
 
-                // Opacity
+                // Opacity: fade in, then fade out at end
                 let alpha = 1.0;
                 if (age < P.fadeInTime) {
                     alpha = age / P.fadeInTime;
                 }
-                if (t > 0.65) {
-                    alpha *= 1.0 - (t - 0.65) / 0.35;
+                if (linearT > 0.65) {
+                    alpha *= 1.0 - (linearT - 0.65) / 0.35;
                 }
                 alpha = Math.max(0, Math.min(1, alpha));
                 if (alpha <= 0) continue;
 
-                // Color: continuous gradient from start color → end color over lifetime
-                const r = Math.round(lerp(P.colorStartR, P.colorEndR, t));
-                const g = Math.round(lerp(P.colorStartG, P.colorEndG, t));
-                const b = Math.round(lerp(P.colorStartB, P.colorEndB, t));
+                // Color: continuous gradient from start → end over lifetime
+                const r = Math.round(lerp(P.colorStartR, P.colorEndR, linearT));
+                const g = Math.round(lerp(P.colorStartG, P.colorEndG, linearT));
+                const b = Math.round(lerp(P.colorStartB, P.colorEndB, linearT));
 
-                // Size: slight shrink over life
-                const scale = 1.0 - t * 0.3;
+                // Size: spawn tiny, grow to full size as they travel out
+                // Shoots out small from mouth, reaches full size around 30% of life
+                const growT = Math.min(linearT / 0.3, 1.0);
+                const growEased = 1 - Math.pow(1 - growT, 2); // ease-out quad
+                const scale = lerp(0.15, 1.0, growEased);
                 const size = P.charSize * scale;
 
                 ctx.save();
