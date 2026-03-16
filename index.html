@@ -269,6 +269,7 @@
             // Output keystone
             outTLx:0, outTLy:0, outTRx:0, outTRy:0,
             outBLx:0, outBLy:0, outBRx:0, outBRy:0,
+            outScale:1, outImgX:0, outImgY:0, outRotation:0,
             lyricsFlipped: true,
             cameraDeviceId: '',
         };
@@ -355,6 +356,12 @@
                 { key: 'outBLy',       label: 'BL Y %',        min: -50, max: 50, step: 0.5 },
                 { key: 'outBRx',       label: 'BR X %',        min: -50, max: 50, step: 0.5 },
                 { key: 'outBRy',       label: 'BR Y %',        min: -50, max: 50, step: 0.5 },
+                { accordionEnd: true },
+                { accordion: 'Output Transform' },
+                { key: 'outScale',     label: 'Scale',          min: 0.1, max: 3.0, step: 0.05 },
+                { key: 'outImgX',      label: 'Position X (px)', min: -1000, max: 1000, step: 1 },
+                { key: 'outImgY',      label: 'Position Y (px)', min: -1000, max: 1000, step: 1 },
+                { key: 'outRotation',  label: 'Rotation (deg)',  min: -180, max: 180, step: 0.5 },
                 { accordionEnd: true },
             ];
 
@@ -786,17 +793,32 @@
             const w = canvas.width, h = canvas.height;
             const hasWarp = P.outTLx !== 0 || P.outTLy !== 0 || P.outTRx !== 0 || P.outTRy !== 0 ||
                             P.outBLx !== 0 || P.outBLy !== 0 || P.outBRx !== 0 || P.outBRy !== 0;
-            if (!hasWarp) return; // offCtx content already on canvas, nothing to do
+            const hasOutTransform = P.outScale !== 1 || P.outImgX !== 0 || P.outImgY !== 0 || P.outRotation !== 0;
+            if (!hasWarp && !hasOutTransform) return;
 
             // Copy canvas content to offscreen, then warp back
             offCtx.clearRect(0, 0, w, h);
             offCtx.drawImage(canvas, 0, 0);
             ctx.clearRect(0, 0, w, h);
 
-            const tl = { x: w * (P.outTLx / 100),       y: h * (P.outTLy / 100) };
-            const tr = { x: w * (1 + P.outTRx / 100),   y: h * (P.outTRy / 100) };
-            const bl = { x: w * (P.outBLx / 100),       y: h * (1 + P.outBLy / 100) };
-            const br = { x: w * (1 + P.outBRx / 100),   y: h * (1 + P.outBRy / 100) };
+            let tl = { x: w * (P.outTLx / 100),       y: h * (P.outTLy / 100) };
+            let tr = { x: w * (1 + P.outTRx / 100),   y: h * (P.outTRy / 100) };
+            let bl = { x: w * (P.outBLx / 100),       y: h * (1 + P.outBLy / 100) };
+            let br = { x: w * (1 + P.outBRx / 100),   y: h * (1 + P.outBRy / 100) };
+
+            // Apply output transform (scale, position, rotation) to corners
+            if (hasOutTransform) {
+                const cx = w / 2, cy = h / 2;
+                const s = P.outScale;
+                const rad = P.outRotation * Math.PI / 180;
+                const cosR = Math.cos(rad), sinR = Math.sin(rad);
+                const tx = P.outImgX, ty = P.outImgY;
+                function xfOut(p) {
+                    let x = (p.x - cx) * s, y = (p.y - cy) * s;
+                    return { x: x * cosR - y * sinR + cx + tx, y: x * sinR + y * cosR + cy + ty };
+                }
+                tl = xfOut(tl); tr = xfOut(tr); bl = xfOut(bl); br = xfOut(br);
+            }
 
             const divs = 8;
             for (let gy = 0; gy < divs; gy++) {
@@ -827,10 +849,24 @@
             const w = canvas.width, h = canvas.height;
 
             // Compute warped corners
-            const tl = { x: w * (P.outTLx / 100),       y: h * (P.outTLy / 100) };
-            const tr = { x: w * (1 + P.outTRx / 100),   y: h * (P.outTRy / 100) };
-            const bl = { x: w * (P.outBLx / 100),       y: h * (1 + P.outBLy / 100) };
-            const br = { x: w * (1 + P.outBRx / 100),   y: h * (1 + P.outBRy / 100) };
+            let tl = { x: w * (P.outTLx / 100),       y: h * (P.outTLy / 100) };
+            let tr = { x: w * (1 + P.outTRx / 100),   y: h * (P.outTRy / 100) };
+            let bl = { x: w * (P.outBLx / 100),       y: h * (1 + P.outBLy / 100) };
+            let br = { x: w * (1 + P.outBRx / 100),   y: h * (1 + P.outBRy / 100) };
+
+            // Apply output transform so grid matches actual output
+            if (P.outScale !== 1 || P.outImgX !== 0 || P.outImgY !== 0 || P.outRotation !== 0) {
+                const cx = w / 2, cy = h / 2;
+                const s = P.outScale;
+                const rad = P.outRotation * Math.PI / 180;
+                const cosR = Math.cos(rad), sinR = Math.sin(rad);
+                const tx = P.outImgX, ty = P.outImgY;
+                function xfGrid(p) {
+                    let x = (p.x - cx) * s, y = (p.y - cy) * s;
+                    return { x: x * cosR - y * sinR + cx + tx, y: x * sinR + y * cosR + cy + ty };
+                }
+                tl = xfGrid(tl); tr = xfGrid(tr); bl = xfGrid(bl); br = xfGrid(br);
+            }
 
             const divs = 8;
             ctx.save();
