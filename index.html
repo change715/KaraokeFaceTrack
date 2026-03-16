@@ -175,6 +175,40 @@
             margin: 4px 0 8px 0;
         }
         .tweak-select option { background: #1a1a2e; color: #fff; }
+        .tweak-accordion {
+            margin: 8px 0 4px 0;
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .tweak-accordion-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 10px;
+            background: rgba(255,255,255,0.06);
+            cursor: pointer;
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            opacity: 0.7;
+            user-select: none;
+        }
+        .tweak-accordion-header:hover { opacity: 1; }
+        .tweak-accordion-header::after {
+            content: '▸';
+            transition: transform 0.2s;
+        }
+        .tweak-accordion.open .tweak-accordion-header::after {
+            transform: rotate(90deg);
+        }
+        .tweak-accordion-body {
+            display: none;
+            padding: 6px 10px;
+        }
+        .tweak-accordion.open .tweak-accordion-body {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -287,35 +321,39 @@
                 { key: 'subX',         label: 'Offset X (px)', min: -500, max: 500, step: 1 },
                 { key: 'subY',         label: 'Bottom (px)',   min: 0, max: 500, step: 1 },
                 { key: 'subScale',     label: 'Scale',         min: 0.3, max: 3.0, step: 0.05 },
-                { section: 'Keystone — Top Left' },
+                { accordion: 'Camera Input Keystone' },
                 { key: 'ksTLx',        label: 'TL X %',        min: -50, max: 50, step: 0.5 },
                 { key: 'ksTLy',        label: 'TL Y %',        min: -50, max: 50, step: 0.5 },
-                { section: 'Keystone — Top Right' },
                 { key: 'ksTRx',        label: 'TR X %',        min: -50, max: 50, step: 0.5 },
                 { key: 'ksTRy',        label: 'TR Y %',        min: -50, max: 50, step: 0.5 },
-                { section: 'Keystone — Bottom Left' },
                 { key: 'ksBLx',        label: 'BL X %',        min: -50, max: 50, step: 0.5 },
                 { key: 'ksBLy',        label: 'BL Y %',        min: -50, max: 50, step: 0.5 },
-                { section: 'Keystone — Bottom Right' },
                 { key: 'ksBRx',        label: 'BR X %',        min: -50, max: 50, step: 0.5 },
                 { key: 'ksBRy',        label: 'BR Y %',        min: -50, max: 50, step: 0.5 },
-                { section: 'Output Warp — Top Left' },
+                { accordionEnd: true },
+                { accordion: 'Output Warp' },
                 { key: 'outTLx',       label: 'TL X %',        min: -50, max: 50, step: 0.5 },
                 { key: 'outTLy',       label: 'TL Y %',        min: -50, max: 50, step: 0.5 },
-                { section: 'Output Warp — Top Right' },
                 { key: 'outTRx',       label: 'TR X %',        min: -50, max: 50, step: 0.5 },
                 { key: 'outTRy',       label: 'TR Y %',        min: -50, max: 50, step: 0.5 },
-                { section: 'Output Warp — Bottom Left' },
                 { key: 'outBLx',       label: 'BL X %',        min: -50, max: 50, step: 0.5 },
                 { key: 'outBLy',       label: 'BL Y %',        min: -50, max: 50, step: 0.5 },
-                { section: 'Output Warp — Bottom Right' },
                 { key: 'outBRx',       label: 'BR X %',        min: -50, max: 50, step: 0.5 },
                 { key: 'outBRy',       label: 'BR Y %',        min: -50, max: 50, step: 0.5 },
+                { accordionEnd: true },
             ];
 
             // Camera selector
             let html = '<h3>Camera</h3><select class="tweak-select" id="camera-select"><option value="">Loading cameras...</option></select>';
             for (const d of defs) {
+                if (d.accordion) {
+                    html += `<div class="tweak-accordion"><div class="tweak-accordion-header">${d.accordion}</div><div class="tweak-accordion-body">`;
+                    continue;
+                }
+                if (d.accordionEnd) {
+                    html += `</div></div>`;
+                    continue;
+                }
                 if (d.section) {
                     html += `<h3>${d.section}</h3>`;
                     continue;
@@ -331,7 +369,15 @@
             html += `<button class="tweak-btn" id="flip-lyrics-btn">Flip Lyrics Horizontally</button>`;
             html += `<button class="tweak-btn" id="set-defaults-btn">Set Current as Default</button>`;
             html += `<button class="tweak-btn" id="reset-defaults-btn" style="color:#ff8888;border-color:rgba(255,136,136,0.4);background:rgba(255,136,136,0.1)">Reset to Original Defaults</button>`;
+            html += `<button class="tweak-btn" id="hide-ui-btn" style="color:#ffcc66;border-color:rgba(255,204,102,0.4);background:rgba(255,204,102,0.1)">Hide UI (Press 1)</button>`;
             tweaksPanel.innerHTML = html;
+
+            // Accordion toggle
+            tweaksPanel.querySelectorAll('.tweak-accordion-header').forEach(hdr => {
+                hdr.addEventListener('click', () => {
+                    hdr.parentElement.classList.toggle('open');
+                });
+            });
 
             // Sync slider → number input
             tweaksPanel.querySelectorAll('input[type="range"]').forEach(inp => {
@@ -375,6 +421,11 @@
             document.getElementById('flip-lyrics-btn').addEventListener('click', () => {
                 lyricsFlipped = !lyricsFlipped;
                 P.lyricsFlipped = lyricsFlipped;
+            });
+
+            // Hide UI button
+            document.getElementById('hide-ui-btn').addEventListener('click', () => {
+                toggleCleanMode();
             });
 
             // Set current values as default
@@ -1222,14 +1273,17 @@
 
         // ─── "1" key: toggle clean mode (hide UI + webcam, black background) ───
         let cleanMode = false;
+        function toggleCleanMode() {
+            cleanMode = !cleanMode;
+            dispCanvas.style.display = cleanMode ? 'none' : '';
+            tweaksToggle.style.display = cleanMode ? 'none' : '';
+            tweaksPanel.classList.remove('open');
+            tweaksPanel.style.display = cleanMode ? 'none' : '';
+            statusEl.style.display = cleanMode ? 'none' : '';
+        }
         document.addEventListener('keydown', (e) => {
             if (e.key === '1') {
-                cleanMode = !cleanMode;
-                dispCanvas.style.display = cleanMode ? 'none' : '';
-                tweaksToggle.style.display = cleanMode ? 'none' : '';
-                tweaksPanel.classList.remove('open');
-                tweaksPanel.style.display = cleanMode ? 'none' : '';
-                statusEl.style.display = cleanMode ? 'none' : '';
+                toggleCleanMode();
             }
             if (e.key === '2') {
                 // Restart song from the beginning
