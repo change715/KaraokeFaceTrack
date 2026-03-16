@@ -1091,7 +1091,7 @@
         document.addEventListener('keydown', (e) => {
             if (e.key === '1') {
                 cleanMode = !cleanMode;
-                video.style.display = cleanMode ? 'none' : '';
+                dispCanvas.style.display = cleanMode ? 'none' : '';
                 tweaksToggle.style.display = cleanMode ? 'none' : '';
                 tweaksPanel.classList.remove('open');
                 tweaksPanel.style.display = cleanMode ? 'none' : '';
