@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Karaoke Face Track</title>
+    <title>Musikase</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -221,7 +221,7 @@
         <button id="tweaks-toggle">Parameters</button>
         <div id="tweaks-panel"></div>
         <div id="startScreen">
-            <h1>Karaoke Face Track</h1>
+            <h1>Musikase</h1>
             <p>Hallelujah &mdash; Leonard Cohen</p>
             <button id="startBtn" disabled>Loading...</button>
         </div>
@@ -1266,16 +1266,19 @@
             log('Ready');
         }
 
+        // ─── "1" key: toggle clean mode (hide UI + webcam, black background) ───
+        let cleanMode = true;
+
         startBtn.addEventListener('click', () => {
             startScreen.style.display = 'none';
             running = true;
+            // Apply default clean mode
+            dispCanvas.style.display = 'none';
+            tweaksToggle.style.display = 'none';
+            statusEl.style.display = 'none';
             audio.play().catch(e => { log('Audio error: ' + e.message); });
             requestAnimationFrame(animate);
-            log('Playing...');
         });
-
-        // ─── "1" key: toggle clean mode (hide UI + webcam, black background) ───
-        let cleanMode = false;
         function toggleCleanMode() {
             cleanMode = !cleanMode;
             dispCanvas.style.display = cleanMode ? 'none' : '';
