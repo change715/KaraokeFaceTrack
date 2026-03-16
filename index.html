@@ -311,6 +311,7 @@
             outScale:1, outImgX:0, outImgY:0, outRotation:0,
             lyricsFlipped: true,
             cameraMirrored: false,
+            calibNudge: 0.5,
             cameraDeviceId: '',
         };
 
@@ -433,7 +434,8 @@
             html += `<option value="TL">Top-Left</option><option value="TR">Top-Right</option>`;
             html += `<option value="BL">Bottom-Left</option><option value="BR">Bottom-Right</option>`;
             html += `</select></div>`;
-            html += `<div style="opacity:0.5;font-size:0.7rem;margin:2px 0 4px 0">Drag corners or use arrow keys (hold Shift for fine, Ctrl for large)</div>`;
+            html += `<div class="tweak-row"><label>Nudge step %</label><input type="range" data-key="calibNudge" min="0.05" max="5" step="0.05" value="${P.calibNudge}"><input type="number" data-key="calibNudge" id="val-calibNudge" step="0.05" value="${P.calibNudge.toFixed(2)}"></div>`;
+            html += `<div style="opacity:0.5;font-size:0.7rem;margin:2px 0 4px 0">Drag corners or use arrow keys (Shift=&frac14;x, Ctrl=4x)</div>`;
             html += `</div>`;
             html += `<button class="tweak-btn" id="grid-toggle-btn">Show Output Grid</button>`;
             html += `<button class="tweak-btn" id="set-defaults-btn">Set Current as Default</button>`;
@@ -1652,7 +1654,7 @@
             // Arrow key nudge for calibration
             if (calibMode && ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
                 e.preventDefault();
-                const step = e.ctrlKey || e.metaKey ? 2.0 : e.shiftKey ? 0.1 : 0.5;
+                const step = e.ctrlKey || e.metaKey ? P.calibNudge * 4 : e.shiftKey ? P.calibNudge * 0.25 : P.calibNudge;
                 const c = calibSelectedCorner;
                 const keyMap = getCalibKeyMap();
                 const kx = keyMap[c][0], ky = keyMap[c][1];
