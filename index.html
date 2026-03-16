@@ -223,6 +223,9 @@
         }
         .calib-corner.active { border-color: #ff0; background: rgba(255,255,0,0.35); }
         .calib-corner:hover { background: rgba(0,255,0,0.5); }
+        .calib-corner.output-mode { border-color: #88aaff; background: rgba(136,170,255,0.25); }
+        .calib-corner.output-mode:hover { background: rgba(136,170,255,0.5); }
+        .calib-corner.output-mode.active { border-color: #ff0; background: rgba(255,255,0,0.35); }
         .calib-label {
             position: absolute;
             color: #0f0;
@@ -233,6 +236,7 @@
             text-shadow: 0 0 3px #000, 0 0 6px #000;
             transform: translate(-50%, 14px);
         }
+        .calib-label.output-mode { color: #88aaff; }
         .calib-label.active { color: #ff0; }
         #calib-overlay {
             position: absolute;
@@ -423,6 +427,7 @@
             html += `<button class="tweak-btn" id="flip-lyrics-btn">Flip Lyrics Horizontally</button>`;
             html += `<button class="tweak-btn" id="mirror-cam-btn">${P.cameraMirrored ? 'Unmirror Camera' : 'Mirror Camera'}</button>`;
             html += `<button class="tweak-btn" id="calibrate-btn">Calibrate Camera</button>`;
+            html += `<button class="tweak-btn" id="calibrate-out-btn">Calibrate Output</button>`;
             html += `<div id="calib-controls" style="display:none;margin:6px 0">`;
             html += `<div class="tweak-row"><label>Arrow nudge</label><select class="tweak-select" id="calib-corner-select" style="margin:0;flex:1">`;
             html += `<option value="TL">Top-Left</option><option value="TR">Top-Right</option>`;
@@ -500,19 +505,32 @@
                 document.getElementById('grid-toggle-btn').textContent = showOutputGrid ? 'Hide Output Grid' : 'Show Output Grid';
             });
 
-            // Calibrate camera button
-            document.getElementById('calibrate-btn').addEventListener('click', () => {
-                calibMode = !calibMode;
-                document.getElementById('calibrate-btn').textContent = calibMode ? 'Exit Calibration' : 'Calibrate Camera';
-                document.getElementById('calib-controls').style.display = calibMode ? '' : 'none';
+            // Calibration toggle helper
+            function toggleCalib(target) {
+                const wasActive = calibMode && calibTarget === target;
+                // Turn off any active calibration first
+                calibMode = false;
+                calibTarget = null;
+                document.getElementById('calibrate-btn').textContent = 'Calibrate Camera';
+                document.getElementById('calibrate-out-btn').textContent = 'Calibrate Output';
+                document.getElementById('calib-controls').style.display = 'none';
                 const overlay = document.getElementById('calib-overlay');
-                overlay.classList.toggle('active', calibMode);
-                if (calibMode) {
+                overlay.classList.remove('active');
+                overlay.innerHTML = '';
+
+                if (!wasActive) {
+                    calibMode = true;
+                    calibTarget = target;
+                    const btn = target === 'camera' ? 'calibrate-btn' : 'calibrate-out-btn';
+                    document.getElementById(btn).textContent = 'Exit Calibration';
+                    document.getElementById('calib-controls').style.display = '';
+                    overlay.classList.add('active');
                     updateCalibCorners();
-                } else {
-                    overlay.innerHTML = '';
                 }
-            });
+            }
+
+            document.getElementById('calibrate-btn').addEventListener('click', () => toggleCalib('camera'));
+            document.getElementById('calibrate-out-btn').addEventListener('click', () => toggleCalib('output'));
 
             // Hide UI button
             document.getElementById('hide-ui-btn').addEventListener('click', () => {
@@ -567,6 +585,7 @@
         let cameraMirrored   = P.cameraMirrored;
         let showOutputGrid   = false;
         let calibMode        = false;
+        let calibTarget      = null; // 'camera' or 'output'
         let calibSelectedCorner = 'TL';
         let calibDragging    = null; // 'TL', 'TR', 'BL', 'BR' or null
         let faceLandmarker   = null;
@@ -589,11 +608,16 @@
 
         // ─── Calibration: draggable corner handles ───
         const CALIB_CORNERS = ['TL', 'TR', 'BL', 'BR'];
-        const CALIB_KEY_MAP = { TL: ['ksTLx','ksTLy'], TR: ['ksTRx','ksTRy'], BL: ['ksBLx','ksBLy'], BR: ['ksBRx','ksBRy'] };
+        const CALIB_KEY_MAPS = {
+            camera: { TL: ['ksTLx','ksTLy'], TR: ['ksTRx','ksTRy'], BL: ['ksBLx','ksBLy'], BR: ['ksBRx','ksBRy'] },
+            output: { TL: ['outTLx','outTLy'], TR: ['outTRx','outTRy'], BL: ['outBLx','outBLy'], BR: ['outBRx','outBRy'] },
+        };
+        function getCalibKeyMap() { return CALIB_KEY_MAPS[calibTarget] || CALIB_KEY_MAPS.camera; }
 
         function getCornerScreenPos(corner) {
+            const keyMap = getCalibKeyMap();
             const w = dispCanvas.clientWidth, h = dispCanvas.clientHeight;
-            const kx = CALIB_KEY_MAP[corner][0], ky = CALIB_KEY_MAP[corner][1];
+            const kx = keyMap[corner][0], ky = keyMap[corner][1];
             const isRight = corner.includes('R'), isBottom = corner.includes('B');
             const x = isRight ? w * (1 + P[kx] / 100) : w * (P[kx] / 100);
             const y = isBottom ? h * (1 + P[ky] / 100) : h * (P[ky] / 100);
@@ -601,8 +625,9 @@
         }
 
         function screenPosToParam(corner, sx, sy) {
+            const keyMap = getCalibKeyMap();
             const w = dispCanvas.clientWidth, h = dispCanvas.clientHeight;
-            const kx = CALIB_KEY_MAP[corner][0], ky = CALIB_KEY_MAP[corner][1];
+            const kx = keyMap[corner][0], ky = keyMap[corner][1];
             const isRight = corner.includes('R'), isBottom = corner.includes('B');
             P[kx] = isRight ? (sx / w - 1) * 100 : (sx / w) * 100;
             P[ky] = isBottom ? (sy / h - 1) * 100 : (sy / h) * 100;
@@ -623,13 +648,14 @@
                 const pos = getCornerScreenPos(c);
                 // Handle
                 const handle = document.createElement('div');
-                handle.className = 'calib-corner' + (c === calibSelectedCorner ? ' active' : '');
+                const isOut = calibTarget === 'output';
+                handle.className = 'calib-corner' + (isOut ? ' output-mode' : '') + (c === calibSelectedCorner ? ' active' : '');
                 handle.style.left = pos.x + 'px';
                 handle.style.top = pos.y + 'px';
                 handle.dataset.corner = c;
                 // Label
                 const label = document.createElement('div');
-                label.className = 'calib-label' + (c === calibSelectedCorner ? ' active' : '');
+                label.className = 'calib-label' + (isOut ? ' output-mode' : '') + (c === calibSelectedCorner ? ' active' : '');
                 label.style.left = pos.x + 'px';
                 label.style.top = pos.y + 'px';
                 label.textContent = c;
@@ -658,7 +684,7 @@
             lineCanvas.height = dispCanvas.clientHeight;
             const lctx = lineCanvas.getContext('2d');
             const pts = CALIB_CORNERS.map(c => getCornerScreenPos(c));
-            lctx.strokeStyle = 'rgba(0,255,0,0.5)';
+            lctx.strokeStyle = calibTarget === 'output' ? 'rgba(136,170,255,0.5)' : 'rgba(0,255,0,0.5)';
             lctx.lineWidth = 1;
             lctx.beginPath();
             lctx.moveTo(pts[0].x, pts[0].y); // TL
@@ -1628,7 +1654,8 @@
                 e.preventDefault();
                 const step = e.ctrlKey || e.metaKey ? 2.0 : e.shiftKey ? 0.1 : 0.5;
                 const c = calibSelectedCorner;
-                const kx = CALIB_KEY_MAP[c][0], ky = CALIB_KEY_MAP[c][1];
+                const keyMap = getCalibKeyMap();
+                const kx = keyMap[c][0], ky = keyMap[c][1];
                 if (e.key === 'ArrowLeft')  P[kx] -= step;
                 if (e.key === 'ArrowRight') P[kx] += step;
                 if (e.key === 'ArrowUp')    P[ky] -= step;
