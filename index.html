@@ -150,13 +150,35 @@
             flex: 1;
             accent-color: #88aaff;
         }
-        .tweak-row .val {
-            flex: 0 0 48px;
+        .tweak-row input[type="number"] {
+            flex: 0 0 58px;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.25);
+            border-radius: 4px;
+            color: #fff;
             text-align: right;
-            opacity: 0.6;
             font-size: 0.75rem;
             font-family: monospace;
+            padding: 2px 4px;
+            -moz-appearance: textfield;
         }
+        .tweak-row input[type="number"]::-webkit-inner-spin-button,
+        .tweak-row input[type="number"]::-webkit-outer-spin-button {
+            opacity: 1;
+        }
+        .tweak-btn {
+            width: 100%;
+            margin: 10px 0 4px 0;
+            padding: 6px 0;
+            background: rgba(136,170,255,0.15);
+            border: 1px solid rgba(136,170,255,0.4);
+            color: #88aaff;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.78rem;
+            font-family: sans-serif;
+        }
+        .tweak-btn:hover { background: rgba(136,170,255,0.25); }
     </style>
 </head>
 <body>
@@ -165,7 +187,7 @@
         <canvas id="overlay"></canvas>
         <div id="subtitle-box"></div>
         <div id="status">Loading...</div>
-        <button id="tweaks-toggle">Tweaks</button>
+        <button id="tweaks-toggle">Parameters</button>
         <div id="tweaks-panel"></div>
         <div id="startScreen">
             <h1>Karaoke Face Track</h1>
@@ -253,21 +275,44 @@
                     html += `<h3>${d.section}</h3>`;
                     continue;
                 }
+                const displayVal = Number.isInteger(P[d.key]) ? P[d.key] : P[d.key].toFixed(2);
                 html += `<div class="tweak-row">
                     <label>${d.label}</label>
                     <input type="range" data-key="${d.key}" min="${d.min}" max="${d.max}" step="${d.step}" value="${P[d.key]}">
-                    <span class="val" id="val-${d.key}">${P[d.key]}</span>
+                    <input type="number" data-key="${d.key}" id="val-${d.key}" min="${d.min}" max="${d.max}" step="${d.step}" value="${displayVal}">
                 </div>`;
             }
+            html += `<button class="tweak-btn" id="flip-lyrics-btn">Flip Lyrics Horizontally</button>`;
             tweaksPanel.innerHTML = html;
 
+            // Sync slider → number input
             tweaksPanel.querySelectorAll('input[type="range"]').forEach(inp => {
                 inp.addEventListener('input', () => {
                     const key = inp.dataset.key;
                     P[key] = parseFloat(inp.value);
-                    document.getElementById('val-' + key).textContent =
-                        Number.isInteger(P[key]) ? P[key] : P[key].toFixed(2);
+                    const numInp = document.getElementById('val-' + key);
+                    numInp.value = Number.isInteger(P[key]) ? P[key] : P[key].toFixed(2);
                 });
+            });
+
+            // Sync number input → slider
+            tweaksPanel.querySelectorAll('input[type="number"]').forEach(inp => {
+                inp.addEventListener('input', () => {
+                    const key = inp.dataset.key;
+                    const v = parseFloat(inp.value);
+                    if (isNaN(v)) return;
+                    P[key] = v;
+                    const slider = tweaksPanel.querySelector(`input[type="range"][data-key="${key}"]`);
+                    slider.value = v;
+                });
+            });
+
+            // Flip lyrics button
+            document.getElementById('flip-lyrics-btn').addEventListener('click', () => {
+                lyricsFlipped = !lyricsFlipped;
+                subtitleBox.style.transform = lyricsFlipped
+                    ? 'translateX(-50%) scaleX(-1)'
+                    : 'translateX(-50%)';
             });
         }
 
@@ -276,6 +321,7 @@
         });
 
         // ─── State ───
+        let lyricsFlipped    = false;
         let faceLandmarker   = null;
         let lyricsData       = [];
         let running          = false;
