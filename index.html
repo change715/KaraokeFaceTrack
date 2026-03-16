@@ -197,7 +197,7 @@
     </div>
 
     <script type="module">
-        import { FaceLandmarker, FilesetResolver } from
+        import { FaceLandmarker, PoseLandmarker, FilesetResolver } from
             "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/vision_bundle.mjs";
 
         // ─── DOM ───
@@ -373,6 +373,7 @@
         // ─── State ───
         let lyricsFlipped    = false;
         let faceLandmarker   = null;
+        let poseLandmarker   = null;
         let lyricsData       = [];
         let running          = false;
         let lastDetectTs     = -1;
@@ -454,6 +455,31 @@
             }
         }
 
+        async function initPoseLandmarker() {
+            log('Loading pose model...');
+            const vision = await FilesetResolver.forVisionTasks(
+                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm"
+            );
+            for (const delegate of ["GPU", "CPU"]) {
+                try {
+                    log(`Trying pose model (${delegate})...`);
+                    poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+                        baseOptions: {
+                            modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+                            delegate
+                        },
+                        runningMode: "VIDEO",
+                        numPoses: 1,
+                    });
+                    log(`Pose model loaded (${delegate})`);
+                    return;
+                } catch (e) {
+                    console.warn(`Pose ${delegate} failed:`, e);
+                    if (delegate === "CPU") log('Pose model unavailable (fallback disabled)');
+                }
+            }
+        }
+
         // ─── Start webcam ───
         async function startCamera() {
             log('Requesting camera...');
@@ -480,81 +506,136 @@
         // ─── Detect face ───
         const FACE_LOST_GRACE = 500; // ms to keep last position after losing tracking
         let lastFaceSeenTs = 0;
+        let lastPoseDetectTs = -1;
+
+        // Shared smoothing update for any tracking source
+        function applyTracking(rawX, rawY, clampedYaw, clampedPitch, timestamp) {
+            const sm = 1 - P.mouthSmooth;
+            if (!hasFace) {
+                smoothMouthX = rawX; smoothMouthY = rawY;
+                smoothYaw = clampedYaw;
+                smoothPitch = clampedPitch;
+            } else {
+                smoothMouthX += (rawX - smoothMouthX) * sm;
+                smoothMouthY += (rawY - smoothMouthY) * sm;
+                smoothYaw += (clampedYaw - smoothYaw) * sm * 0.5;
+                smoothPitch += (clampedPitch - smoothPitch) * sm * 0.5;
+            }
+            mouthX = smoothMouthX;
+            mouthY = smoothMouthY;
+            faceYaw = smoothYaw;
+            facePitch = smoothPitch;
+            hasFace = true;
+            lastFaceSeenTs = timestamp;
+        }
+
+        // Try face landmarks → face nose fallback → returns false if no face detected
+        function tryFaceDetect(ts, timestamp) {
+            if (!faceLandmarker) return false;
+            const results = faceLandmarker.detectForVideo(video, ts);
+            if (!results.faceLandmarks || results.faceLandmarks.length === 0) return false;
+
+            const lm = results.faceLandmarks[0];
+            const upper = lm[13], lower = lm[14], nose = lm[1];
+            const chin = lm[152];
+            let trackX, trackY;
+
+            if (upper && lower && upper.x > 0 && lower.x > 0) {
+                trackX = (upper.x + lower.x) / 2;
+                trackY = (upper.y + lower.y) / 2;
+            } else if (nose) {
+                const mouthEstY = chin ? (nose.y + chin.y) / 2 : nose.y + 0.04;
+                trackX = nose.x;
+                trackY = mouthEstY;
+            } else {
+                return false;
+            }
+
+            const rawX = (1.0 - trackX) * canvas.width;
+            const rawY = trackY * canvas.height;
+
+            // Face yaw
+            const rightEdge = lm[234], leftEdge = lm[454];
+            const faceCX = (rightEdge.x + leftEdge.x) / 2;
+            const faceW = Math.abs(rightEdge.x - leftEdge.x);
+            const rawYaw = faceW > 0.001
+                ? -((nose.x - faceCX) / (faceW * 0.5))
+                : 0;
+
+            // Face pitch
+            const forehead = lm[10];
+            const faceCY = (forehead.y + chin.y) / 2;
+            const faceH = Math.abs(chin.y - forehead.y);
+            const rawPitch = faceH > 0.001
+                ? (nose.y - faceCY) / (faceH * 0.5)
+                : 0;
+
+            applyTracking(rawX, rawY,
+                Math.max(-1, Math.min(1, rawYaw)),
+                Math.max(-1, Math.min(1, rawPitch)),
+                timestamp);
+            return true;
+        }
+
+        // Pose fallback: use head position from pose landmarks
+        // Pose landmarks: 0=nose, 2=left eye inner, 5=right eye inner,
+        //                 9=mouth left, 10=mouth right, 11=left shoulder, 12=right shoulder
+        function tryPoseDetect(ts, timestamp) {
+            if (!poseLandmarker) return false;
+            if (ts <= lastPoseDetectTs) return false;
+            lastPoseDetectTs = ts;
+
+            const results = poseLandmarker.detectForVideo(video, ts);
+            if (!results.landmarks || results.landmarks.length === 0) return false;
+
+            const lm = results.landmarks[0];
+            const nose = lm[0];
+            const mouthL = lm[9], mouthR = lm[10];
+            if (!nose) return false;
+
+            // Use pose mouth landmarks if available, else nose
+            let trackX, trackY;
+            if (mouthL && mouthR && mouthL.x > 0 && mouthR.x > 0) {
+                trackX = (mouthL.x + mouthR.x) / 2;
+                trackY = (mouthL.y + mouthR.y) / 2;
+            } else {
+                trackX = nose.x;
+                trackY = nose.y + 0.04; // offset down toward mouth
+            }
+
+            const rawX = (1.0 - trackX) * canvas.width;
+            const rawY = trackY * canvas.height;
+
+            // Estimate yaw from shoulders
+            const lShoulder = lm[11], rShoulder = lm[12];
+            let estYaw = 0;
+            if (lShoulder && rShoulder) {
+                const shoulderCX = (lShoulder.x + rShoulder.x) / 2;
+                const shoulderW = Math.abs(lShoulder.x - rShoulder.x);
+                if (shoulderW > 0.01) {
+                    estYaw = -((nose.x - shoulderCX) / (shoulderW * 0.5));
+                    estYaw = Math.max(-1, Math.min(1, estYaw));
+                }
+            }
+
+            applyTracking(rawX, rawY, estYaw, 0, timestamp);
+            return true;
+        }
 
         function detectFace(timestamp) {
-            if (!faceLandmarker) return;
             const ts = Math.round(timestamp);
             if (ts <= lastDetectTs) return;
             lastDetectTs = ts;
             try {
-                const results = faceLandmarker.detectForVideo(video, ts);
-                if (results.faceLandmarks && results.faceLandmarks.length > 0) {
-                    const lm = results.faceLandmarks[0];
+                // Primary: face landmarks (mouth → face nose fallback)
+                if (tryFaceDetect(ts, timestamp)) return;
 
-                    // Primary: mouth (landmarks 13 & 14)
-                    // Fallback: nose tip (landmark 1) offset down toward mouth
-                    const upper = lm[13], lower = lm[14], nose = lm[1];
-                    const chin = lm[152];
-                    let trackX, trackY;
+                // Secondary: pose tracking (works at distance / extreme angles)
+                if (tryPoseDetect(ts, timestamp)) return;
 
-                    if (upper && lower && upper.x > 0 && lower.x > 0) {
-                        // Mouth landmarks available
-                        trackX = (upper.x + lower.x) / 2;
-                        trackY = (upper.y + lower.y) / 2;
-                    } else if (nose) {
-                        // Fallback: estimate mouth from nose + chin midpoint
-                        const mouthEstY = chin ? (nose.y + chin.y) / 2 : nose.y + 0.04;
-                        trackX = nose.x;
-                        trackY = mouthEstY;
-                    } else {
-                        return; // no usable landmarks
-                    }
-
-                    const normX = 1.0 - trackX;
-                    const normY = trackY;
-                    const rawX = normX * canvas.width;
-                    const rawY = normY * canvas.height;
-
-                    // Face yaw: nose position relative to face edges
-                    const rightEdge = lm[234], leftEdge = lm[454];
-                    const faceCX = (rightEdge.x + leftEdge.x) / 2;
-                    const faceW = Math.abs(rightEdge.x - leftEdge.x);
-                    const rawYaw = faceW > 0.001
-                        ? -((nose.x - faceCX) / (faceW * 0.5))  // negated for mirror
-                        : 0;
-                    const clampedYaw = Math.max(-1, Math.min(1, rawYaw));
-
-                    // Face pitch: nose tip vs face vertical center (forehead lm 10, chin lm 152)
-                    const forehead = lm[10];
-                    const faceCY = (forehead.y + chin.y) / 2;
-                    const faceH = Math.abs(chin.y - forehead.y);
-                    const rawPitch = faceH > 0.001
-                        ? (nose.y - faceCY) / (faceH * 0.5)
-                        : 0;
-                    const clampedPitch = Math.max(-1, Math.min(1, rawPitch));
-
-                    const sm = 1 - P.mouthSmooth;
-                    if (!hasFace) {
-                        smoothMouthX = rawX; smoothMouthY = rawY;
-                        smoothYaw = clampedYaw;
-                        smoothPitch = clampedPitch;
-                    } else {
-                        smoothMouthX += (rawX - smoothMouthX) * sm;
-                        smoothMouthY += (rawY - smoothMouthY) * sm;
-                        smoothYaw += (clampedYaw - smoothYaw) * sm * 0.5;
-                        smoothPitch += (clampedPitch - smoothPitch) * sm * 0.5;
-                    }
-                    mouthX = smoothMouthX;
-                    mouthY = smoothMouthY;
-                    faceYaw = smoothYaw;
-                    facePitch = smoothPitch;
-                    hasFace = true;
-                    lastFaceSeenTs = timestamp;
-                } else {
-                    // Grace period: keep last position briefly before giving up
-                    if (hasFace && (timestamp - lastFaceSeenTs) > FACE_LOST_GRACE) {
-                        hasFace = false;
-                    }
+                // No tracking source — grace period before giving up
+                if (hasFace && (timestamp - lastFaceSeenTs) > FACE_LOST_GRACE) {
+                    hasFace = false;
                 }
             } catch (e) { console.warn('Face detect error:', e); }
         }
@@ -825,7 +906,7 @@
         async function init() {
             buildTweaksUI();
             try {
-                await Promise.all([loadLyrics(), initFaceLandmarker()]);
+                await Promise.all([loadLyrics(), initFaceLandmarker(), initPoseLandmarker()]);
             } catch (e) {
                 log('Error loading: ' + e.message);
                 console.error(e);
