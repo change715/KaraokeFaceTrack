@@ -571,11 +571,31 @@
 
         // ─── Keystone warp: draw video with corner-pin distortion ───
         // Uses triangulated mesh to approximate perspective warp
+
+        // Compute "cover" crop: scale video to fill canvas, crop excess
+        function coverRect(vw, vh, cw, ch) {
+            const videoAR = vw / vh, canvasAR = cw / ch;
+            let sx = 0, sy = 0, sw = vw, sh = vh;
+            if (videoAR > canvasAR) {
+                // Video wider — crop sides
+                sw = vh * canvasAR;
+                sx = (vw - sw) / 2;
+            } else {
+                // Video taller — crop top/bottom
+                sh = vw / canvasAR;
+                sy = (vh - sh) / 2;
+            }
+            return { sx, sy, sw, sh };
+        }
+
         function drawWarpedVideo() {
             const w = dispCanvas.width, h = dispCanvas.height;
             if (!w || !h || video.readyState < 2) return;
 
             dispCtx.clearRect(0, 0, w, h);
+
+            const vw = video.videoWidth, vh = video.videoHeight;
+            const crop = coverRect(vw, vh, w, h);
 
             // Corner positions (mirrored X for webcam)
             const tl = { x: w * (P.ksTLx / 100),           y: h * (P.ksTLy / 100) };
@@ -593,22 +613,25 @@
                             P.ksBLx !== 0 || P.ksBLy !== 0 || P.ksBRx !== 0 || P.ksBRy !== 0;
 
             if (!hasWarp) {
-                // No warp — simple mirrored draw
+                // No warp — simple mirrored draw with cover crop
                 dispCtx.save();
                 dispCtx.translate(w, 0);
                 dispCtx.scale(-1, 1);
-                dispCtx.drawImage(video, 0, 0, w, h);
+                dispCtx.drawImage(video, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, w, h);
                 dispCtx.restore();
                 return;
             }
 
             // Subdivide into grid for smooth warp
             const divs = 8;
-            const vw = video.videoWidth, vh = video.videoHeight;
             for (let gy = 0; gy < divs; gy++) {
                 for (let gx = 0; gx < divs; gx++) {
                     const u0 = gx / divs, u1 = (gx + 1) / divs;
                     const v0 = gy / divs, v1 = (gy + 1) / divs;
+
+                    // Source coords within the cropped region
+                    const srcX0 = crop.sx + crop.sw * u0, srcX1 = crop.sx + crop.sw * u1;
+                    const srcY0 = crop.sy + crop.sh * v0, srcY1 = crop.sy + crop.sh * v1;
 
                     // Bilinear interpolation of corner positions
                     const p00 = bilerp(mtl, mtr, mbl, mbr, u0, v0);
@@ -618,10 +641,10 @@
 
                     // Draw two triangles per cell
                     drawTriangle(dispCtx, video,
-                        vw * u0, vh * v0, vw * u1, vh * v0, vw * u0, vh * v1,
+                        srcX0, srcY0, srcX1, srcY0, srcX0, srcY1,
                         p00.x, p00.y, p10.x, p10.y, p01.x, p01.y);
                     drawTriangle(dispCtx, video,
-                        vw * u1, vh * v0, vw * u1, vh * v1, vw * u0, vh * v1,
+                        srcX1, srcY0, srcX1, srcY1, srcX0, srcY1,
                         p10.x, p10.y, p11.x, p11.y, p01.x, p01.y);
                 }
             }
