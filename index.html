@@ -327,6 +327,7 @@
                     <input type="number" data-key="${d.key}" id="val-${d.key}" step="${d.step}" value="${displayVal}">
                 </div>`;
             }
+            html += `<div style="display:flex;gap:6px;margin:10px 0 4px 0"><button class="tweak-btn" id="play-btn" style="margin:0;flex:1">Play</button><button class="tweak-btn" id="pause-btn" style="margin:0;flex:1">Pause</button><button class="tweak-btn" id="restart-btn" style="margin:0;flex:1">Restart</button></div>`;
             html += `<button class="tweak-btn" id="flip-lyrics-btn">Flip Lyrics Horizontally</button>`;
             html += `<button class="tweak-btn" id="set-defaults-btn">Set Current as Default</button>`;
             html += `<button class="tweak-btn" id="reset-defaults-btn" style="color:#ff8888;border-color:rgba(255,136,136,0.4);background:rgba(255,136,136,0.1)">Reset to Original Defaults</button>`;
@@ -352,6 +353,22 @@
                     const slider = tweaksPanel.querySelector(`input[type="range"][data-key="${key}"]`);
                     slider.value = v;
                 });
+            });
+
+            // Playback controls
+            document.getElementById('play-btn').addEventListener('click', () => {
+                if (running) audio.play().catch(e => log('Audio error: ' + e.message));
+            });
+            document.getElementById('pause-btn').addEventListener('click', () => {
+                audio.pause();
+            });
+            document.getElementById('restart-btn').addEventListener('click', () => {
+                audio.currentTime = 0;
+                particles.length = 0;
+                lastSegmentIndex = -1;
+                charSpawnIndex = 0;
+                subtitleData = null;
+                if (running) audio.play().catch(e => log('Audio error: ' + e.message));
             });
 
             // Flip lyrics button
