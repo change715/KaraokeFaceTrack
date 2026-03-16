@@ -236,6 +236,9 @@
             fadeStart:     0.80,
             fadeEnd:       0.97,
             syncOffset:    0.00,
+            subX:          0,
+            subY:          40,
+            subScale:      1.0,
         };
         // Load saved defaults from localStorage (if any)
         const savedDefaults = (() => {
@@ -272,6 +275,10 @@
                 { key: 'colorEndR',    label: 'Red',           min: 0, max: 255, step: 1 },
                 { key: 'colorEndG',    label: 'Green',         min: 0, max: 255, step: 1 },
                 { key: 'colorEndB',    label: 'Blue',          min: 0, max: 255, step: 1 },
+                { section: 'Subtitle Position' },
+                { key: 'subX',         label: 'Offset X (px)', min: -500, max: 500, step: 1 },
+                { key: 'subY',         label: 'Bottom (px)',   min: 0, max: 500, step: 1 },
+                { key: 'subScale',     label: 'Scale',         min: 0.3, max: 3.0, step: 0.05 },
             ];
 
             let html = '';
@@ -292,6 +299,15 @@
             html += `<button class="tweak-btn" id="reset-defaults-btn" style="color:#ff8888;border-color:rgba(255,136,136,0.4);background:rgba(255,136,136,0.1)">Reset to Original Defaults</button>`;
             tweaksPanel.innerHTML = html;
 
+            function applySubtitleTransform() {
+                const flipX = lyricsFlipped ? ' scaleX(-1)' : '';
+                subtitleBox.style.bottom = P.subY + 'px';
+                subtitleBox.style.transform = `translateX(calc(-50% + ${P.subX}px)) scale(${P.subScale})${flipX}`;
+            }
+            applySubtitleTransform();
+
+            const subKeys = new Set(['subX', 'subY', 'subScale']);
+
             // Sync slider → number input
             tweaksPanel.querySelectorAll('input[type="range"]').forEach(inp => {
                 inp.addEventListener('input', () => {
@@ -299,6 +315,7 @@
                     P[key] = parseFloat(inp.value);
                     const numInp = document.getElementById('val-' + key);
                     numInp.value = Number.isInteger(P[key]) ? P[key] : P[key].toFixed(2);
+                    if (subKeys.has(key)) applySubtitleTransform();
                 });
             });
 
@@ -311,15 +328,14 @@
                     P[key] = v;
                     const slider = tweaksPanel.querySelector(`input[type="range"][data-key="${key}"]`);
                     slider.value = v;
+                    if (subKeys.has(key)) applySubtitleTransform();
                 });
             });
 
             // Flip lyrics button
             document.getElementById('flip-lyrics-btn').addEventListener('click', () => {
                 lyricsFlipped = !lyricsFlipped;
-                subtitleBox.style.transform = lyricsFlipped
-                    ? 'translateX(-50%) scaleX(-1)'
-                    : 'translateX(-50%)';
+                applySubtitleTransform();
             });
 
             // Set current values as default
@@ -344,6 +360,7 @@
                     const numInp = document.getElementById('val-' + key);
                     numInp.value = Number.isInteger(P[key]) ? P[key] : P[key].toFixed(2);
                 });
+                applySubtitleTransform();
             });
         }
 
