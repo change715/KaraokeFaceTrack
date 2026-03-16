@@ -758,26 +758,13 @@
             const ptG11 = getCornerScreenPos('G11'), ptG12 = getCornerScreenPos('G12');
             const ptG21 = getCornerScreenPos('G21'), ptG22 = getCornerScreenPos('G22');
 
-            // Edge points: corner interpolation + interior node offsets
+            // Edge points: purely interpolated from corners (pinned to border)
             const v1 = P.gridV1, v2 = P.gridV2, h1 = P.gridH1, h2 = P.gridH2;
-            const cw = dispCanvas.clientWidth, ch = dispCanvas.clientHeight;
             function lerp2(a, b, t) { return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }; }
-            // Get the offset each grid node has from its default position (in screen px)
-            const keyMap = getCalibKeyMap();
-            function gOff(name) {
-                return { x: cw * ((P[keyMap[name][0]] || 0) / 100), y: ch * ((P[keyMap[name][1]] || 0) / 100) };
-            }
-            function addOff(p, off) { return { x: p.x + off.x, y: p.y + off.y }; }
-            const off11 = gOff('G11'), off12 = gOff('G12'), off21 = gOff('G21'), off22 = gOff('G22');
-            // Top edge ← G11, G21; Bottom ← G12, G22; Left ← G11, G12; Right ← G21, G22
-            const eT1 = addOff(lerp2(ptTL, ptTR, v1), off11);
-            const eT2 = addOff(lerp2(ptTL, ptTR, v2), off21);
-            const eB1 = addOff(lerp2(ptBL, ptBR, v1), off12);
-            const eB2 = addOff(lerp2(ptBL, ptBR, v2), off22);
-            const eL1 = addOff(lerp2(ptTL, ptBL, h1), off11);
-            const eL2 = addOff(lerp2(ptTL, ptBL, h2), off12);
-            const eR1 = addOff(lerp2(ptTR, ptBR, h1), off21);
-            const eR2 = addOff(lerp2(ptTR, ptBR, h2), off22);
+            const eT1 = lerp2(ptTL, ptTR, v1), eT2 = lerp2(ptTL, ptTR, v2);
+            const eB1 = lerp2(ptBL, ptBR, v1), eB2 = lerp2(ptBL, ptBR, v2);
+            const eL1 = lerp2(ptTL, ptBL, h1), eL2 = lerp2(ptTL, ptBL, h2);
+            const eR1 = lerp2(ptTR, ptBR, h1), eR2 = lerp2(ptTR, ptBR, h2);
 
             // Border outline (corners only)
             lctx.strokeStyle = borderColor;
@@ -1010,8 +997,8 @@
         }
 
         // Build 4x4 grid of control points (16 total) for a given prefix ('ks' or 'out').
-        // Corners: from params. Interior nodes: from params. Edge points: interpolated
-        // from corners + shifted by the nearest interior node's offset.
+        // Corners: from params. Interior nodes: from params.
+        // Edge points: interpolated from corners only (stay on the border).
         // Returns a 4x4 array g[row][col] where row=0..3, col=0..3.
         // Rows: 0=top, 1=h1, 2=h2, 3=bottom. Cols: 0=left, 1=v1, 2=v2, 3=right.
         function getGrid16(prefix, w, h) {
@@ -1021,12 +1008,6 @@
                 return { x: w * (du + (P[kx] || 0) / 100), y: h * (dv + (P[ky] || 0) / 100) };
             }
             function lerp2(a, b, t) { return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }; }
-            // Get interior node's offset from its default position
-            function nodeOff(name, du, dv) {
-                const kx = prefix + name + 'x', ky = prefix + name + 'y';
-                return { x: w * ((P[kx] || 0) / 100), y: h * ((P[ky] || 0) / 100) };
-            }
-            function addOff(p, off) { return { x: p.x + off.x, y: p.y + off.y }; }
 
             // 4 corners
             const tl = pt('TL', 0, 0), tr = pt('TR', 1, 0);
@@ -1034,22 +1015,11 @@
             // 4 interior grid nodes (adjustable)
             const g11 = pt('G11', v1, h1), g12 = pt('G12', v1, h2);
             const g21 = pt('G21', v2, h1), g22 = pt('G22', v2, h2);
-            // Interior node offsets
-            const off11 = nodeOff('G11'), off12 = nodeOff('G12');
-            const off21 = nodeOff('G21'), off22 = nodeOff('G22');
-            // 8 edge points: corner interpolation + nearest interior node offset
-            // Top edge: eT1 ← G11, eT2 ← G21
-            const eT1 = addOff(lerp2(tl, tr, v1), off11);
-            const eT2 = addOff(lerp2(tl, tr, v2), off21);
-            // Bottom edge: eB1 ← G12, eB2 ← G22
-            const eB1 = addOff(lerp2(bl, br, v1), off12);
-            const eB2 = addOff(lerp2(bl, br, v2), off22);
-            // Left edge: eL1 ← G11, eL2 ← G12
-            const eL1 = addOff(lerp2(tl, bl, h1), off11);
-            const eL2 = addOff(lerp2(tl, bl, h2), off12);
-            // Right edge: eR1 ← G21, eR2 ← G22
-            const eR1 = addOff(lerp2(tr, br, h1), off21);
-            const eR2 = addOff(lerp2(tr, br, h2), off22);
+            // 8 edge points: purely interpolated from corners (pinned to border)
+            const eT1 = lerp2(tl, tr, v1), eT2 = lerp2(tl, tr, v2);
+            const eB1 = lerp2(bl, br, v1), eB2 = lerp2(bl, br, v2);
+            const eL1 = lerp2(tl, bl, h1), eL2 = lerp2(tl, bl, h2);
+            const eR1 = lerp2(tr, br, h1), eR2 = lerp2(tr, br, h2);
 
             return {
                 pts: [
