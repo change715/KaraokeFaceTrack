@@ -263,6 +263,7 @@
             burstDistance:300, burstDuration:0.3, targetNoise:60,
             fadeStart:0.8, fadeEnd:0.97, syncOffset:0,
             subX:0, subY:40, subScale:1, subMaxWidth:600,
+            imgScale:1, imgX:0, imgY:0, imgRotation:0,
             ksTLx:0, ksTLy:0, ksTRx:0, ksTRy:0,
             ksBLx:0, ksBLy:0, ksBRx:0, ksBRy:0,
             // Output keystone
@@ -328,6 +329,12 @@
                 { key: 'subY',         label: 'Bottom (px)',   min: 0, max: 500, step: 1 },
                 { key: 'subScale',     label: 'Scale',         min: 0.3, max: 3.0, step: 0.05 },
                 { key: 'subMaxWidth',  label: 'Max width (px)', min: 100, max: 1600, step: 10 },
+                { accordionEnd: true },
+                { accordion: 'Image Transform' },
+                { key: 'imgScale',     label: 'Scale',          min: 0.1, max: 3.0, step: 0.05 },
+                { key: 'imgX',         label: 'Position X (px)', min: -1000, max: 1000, step: 1 },
+                { key: 'imgY',         label: 'Position Y (px)', min: -1000, max: 1000, step: 1 },
+                { key: 'imgRotation',  label: 'Rotation (deg)',  min: -180, max: 180, step: 0.5 },
                 { accordionEnd: true },
                 { accordion: 'Camera Input Keystone' },
                 { key: 'ksTLx',        label: 'TL X %',        min: -50, max: 50, step: 0.5 },
@@ -680,16 +687,31 @@
             const br = { x: w * (1 + P.ksBRx / 100),       y: h * (1 + P.ksBRy / 100) };
 
             // Mirror X (webcam flip)
-            const mtl = { x: w - tl.x, y: tl.y };
-            const mtr = { x: w - tr.x, y: tr.y };
-            const mbl = { x: w - bl.x, y: bl.y };
-            const mbr = { x: w - br.x, y: br.y };
+            let mtl = { x: w - tl.x, y: tl.y };
+            let mtr = { x: w - tr.x, y: tr.y };
+            let mbl = { x: w - bl.x, y: bl.y };
+            let mbr = { x: w - br.x, y: br.y };
+
+            // Apply image transform (scale, position, rotation) to corners
+            const hasImgTransform = P.imgScale !== 1 || P.imgX !== 0 || P.imgY !== 0 || P.imgRotation !== 0;
+            if (hasImgTransform) {
+                const cx = w / 2, cy = h / 2;
+                const s = P.imgScale;
+                const rad = P.imgRotation * Math.PI / 180;
+                const cosR = Math.cos(rad), sinR = Math.sin(rad);
+                const tx = P.imgX, ty = P.imgY;
+                function xfPt(p) {
+                    let x = (p.x - cx) * s, y = (p.y - cy) * s;
+                    return { x: x * cosR - y * sinR + cx + tx, y: x * sinR + y * cosR + cy + ty };
+                }
+                mtl = xfPt(mtl); mtr = xfPt(mtr); mbl = xfPt(mbl); mbr = xfPt(mbr);
+            }
 
             const hasWarp = P.ksTLx !== 0 || P.ksTLy !== 0 || P.ksTRx !== 0 || P.ksTRy !== 0 ||
                             P.ksBLx !== 0 || P.ksBLy !== 0 || P.ksBRx !== 0 || P.ksBRy !== 0;
 
-            if (!hasWarp) {
-                // No warp — simple mirrored draw with cover crop
+            if (!hasWarp && !hasImgTransform) {
+                // No warp or transform — simple mirrored draw with cover crop
                 dispCtx.save();
                 dispCtx.translate(w, 0);
                 dispCtx.scale(-1, 1);
