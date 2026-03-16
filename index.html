@@ -18,11 +18,12 @@
             height: 100vh;
         }
         #webcam {
+            display: none;
+        }
+        #webcam-display {
             position: absolute;
             top: 0; left: 0;
             width: 100%; height: 100%;
-            object-fit: cover;
-            transform: scaleX(-1);
         }
         #overlay {
             position: absolute;
@@ -179,11 +180,24 @@
             font-family: sans-serif;
         }
         .tweak-btn:hover { background: rgba(136,170,255,0.25); }
+        .tweak-select {
+            width: 100%;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.25);
+            border-radius: 4px;
+            color: #fff;
+            font-size: 0.78rem;
+            font-family: sans-serif;
+            padding: 5px 8px;
+            margin: 4px 0 8px 0;
+        }
+        .tweak-select option { background: #1a1a2e; color: #fff; }
     </style>
 </head>
 <body>
     <div id="container">
         <video id="webcam" autoplay playsinline muted></video>
+        <canvas id="webcam-display"></canvas>
         <canvas id="overlay"></canvas>
         <div id="subtitle-box"></div>
         <div id="status">Loading...</div>
@@ -202,6 +216,8 @@
 
         // ─── DOM ───
         const video       = document.getElementById('webcam');
+        const dispCanvas  = document.getElementById('webcam-display');
+        const dispCtx     = dispCanvas.getContext('2d');
         const canvas      = document.getElementById('overlay');
         const ctx         = canvas.getContext('2d');
         const statusEl    = document.getElementById('status');
@@ -240,6 +256,11 @@
             subX:          0,
             subY:          40,
             subScale:      1.0,
+            // Keystone: corner offsets in % (-50 to 50)
+            ksTLx: 0, ksTLy: 0,  // top-left
+            ksTRx: 0, ksTRy: 0,  // top-right
+            ksBLx: 0, ksBLy: 0,  // bottom-left
+            ksBRx: 0, ksBRy: 0,  // bottom-right
         };
         // Load saved defaults from localStorage (if any)
         const savedDefaults = (() => {
@@ -281,9 +302,22 @@
                 { key: 'subX',         label: 'Offset X (px)', min: -500, max: 500, step: 1 },
                 { key: 'subY',         label: 'Bottom (px)',   min: 0, max: 500, step: 1 },
                 { key: 'subScale',     label: 'Scale',         min: 0.3, max: 3.0, step: 0.05 },
+                { section: 'Keystone — Top Left' },
+                { key: 'ksTLx',        label: 'TL X %',        min: -50, max: 50, step: 0.5 },
+                { key: 'ksTLy',        label: 'TL Y %',        min: -50, max: 50, step: 0.5 },
+                { section: 'Keystone — Top Right' },
+                { key: 'ksTRx',        label: 'TR X %',        min: -50, max: 50, step: 0.5 },
+                { key: 'ksTRy',        label: 'TR Y %',        min: -50, max: 50, step: 0.5 },
+                { section: 'Keystone — Bottom Left' },
+                { key: 'ksBLx',        label: 'BL X %',        min: -50, max: 50, step: 0.5 },
+                { key: 'ksBLy',        label: 'BL Y %',        min: -50, max: 50, step: 0.5 },
+                { section: 'Keystone — Bottom Right' },
+                { key: 'ksBRx',        label: 'BR X %',        min: -50, max: 50, step: 0.5 },
+                { key: 'ksBRy',        label: 'BR Y %',        min: -50, max: 50, step: 0.5 },
             ];
 
-            let html = '';
+            // Camera selector
+            let html = '<h3>Camera</h3><select class="tweak-select" id="camera-select"><option value="">Loading cameras...</option></select>';
             for (const d of defs) {
                 if (d.section) {
                     html += `<h3>${d.section}</h3>`;
@@ -481,12 +515,23 @@
         }
 
         // ─── Start webcam ───
-        async function startCamera() {
+        let currentDeviceId = '';
+
+        async function startCamera(deviceId) {
             log('Requesting camera...');
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' }
-            });
+            // Stop existing tracks
+            if (video.srcObject) {
+                video.srcObject.getTracks().forEach(t => t.stop());
+            }
+            const constraints = { video: { width: { ideal: 1280 }, height: { ideal: 720 } } };
+            if (deviceId) {
+                constraints.video.deviceId = { exact: deviceId };
+            } else {
+                constraints.video.facingMode = 'user';
+            }
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
             video.srcObject = stream;
+            currentDeviceId = stream.getVideoTracks()[0]?.getSettings()?.deviceId || '';
             await new Promise((resolve, reject) => {
                 video.onloadedmetadata = resolve;
                 video.onerror = reject;
@@ -496,11 +541,123 @@
             log('Camera ready');
         }
 
+        async function populateCameraSelect() {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoDevices = devices.filter(d => d.kind === 'videoinput');
+            const select = document.getElementById('camera-select');
+            if (!select) return;
+            select.innerHTML = '';
+            for (const d of videoDevices) {
+                const opt = document.createElement('option');
+                opt.value = d.deviceId;
+                opt.textContent = d.label || `Camera ${select.options.length + 1}`;
+                if (d.deviceId === currentDeviceId) opt.selected = true;
+                select.appendChild(opt);
+            }
+            select.addEventListener('change', async () => {
+                try {
+                    await startCamera(select.value);
+                } catch (e) { log('Camera switch error: ' + e.message); }
+            });
+        }
+
         function syncCanvasSize() {
             const w = canvas.clientWidth, h = canvas.clientHeight;
             if (w > 0 && h > 0 && (canvas.width !== w || canvas.height !== h)) {
                 canvas.width = w; canvas.height = h;
+                dispCanvas.width = w; dispCanvas.height = h;
             }
+        }
+
+        // ─── Keystone warp: draw video with corner-pin distortion ───
+        // Uses triangulated mesh to approximate perspective warp
+        function drawWarpedVideo() {
+            const w = dispCanvas.width, h = dispCanvas.height;
+            if (!w || !h || video.readyState < 2) return;
+
+            dispCtx.clearRect(0, 0, w, h);
+
+            // Corner positions (mirrored X for webcam)
+            const tl = { x: w * (P.ksTLx / 100),           y: h * (P.ksTLy / 100) };
+            const tr = { x: w * (1 + P.ksTRx / 100),       y: h * (P.ksTRy / 100) };
+            const bl = { x: w * (P.ksBLx / 100),           y: h * (1 + P.ksBLy / 100) };
+            const br = { x: w * (1 + P.ksBRx / 100),       y: h * (1 + P.ksBRy / 100) };
+
+            // Mirror X (webcam flip)
+            const mtl = { x: w - tl.x, y: tl.y };
+            const mtr = { x: w - tr.x, y: tr.y };
+            const mbl = { x: w - bl.x, y: bl.y };
+            const mbr = { x: w - br.x, y: br.y };
+
+            const hasWarp = P.ksTLx !== 0 || P.ksTLy !== 0 || P.ksTRx !== 0 || P.ksTRy !== 0 ||
+                            P.ksBLx !== 0 || P.ksBLy !== 0 || P.ksBRx !== 0 || P.ksBRy !== 0;
+
+            if (!hasWarp) {
+                // No warp — simple mirrored draw
+                dispCtx.save();
+                dispCtx.translate(w, 0);
+                dispCtx.scale(-1, 1);
+                dispCtx.drawImage(video, 0, 0, w, h);
+                dispCtx.restore();
+                return;
+            }
+
+            // Subdivide into grid for smooth warp
+            const divs = 8;
+            const vw = video.videoWidth, vh = video.videoHeight;
+            for (let gy = 0; gy < divs; gy++) {
+                for (let gx = 0; gx < divs; gx++) {
+                    const u0 = gx / divs, u1 = (gx + 1) / divs;
+                    const v0 = gy / divs, v1 = (gy + 1) / divs;
+
+                    // Bilinear interpolation of corner positions
+                    const p00 = bilerp(mtl, mtr, mbl, mbr, u0, v0);
+                    const p10 = bilerp(mtl, mtr, mbl, mbr, u1, v0);
+                    const p01 = bilerp(mtl, mtr, mbl, mbr, u0, v1);
+                    const p11 = bilerp(mtl, mtr, mbl, mbr, u1, v1);
+
+                    // Draw two triangles per cell
+                    drawTriangle(dispCtx, video,
+                        vw * u0, vh * v0, vw * u1, vh * v0, vw * u0, vh * v1,
+                        p00.x, p00.y, p10.x, p10.y, p01.x, p01.y);
+                    drawTriangle(dispCtx, video,
+                        vw * u1, vh * v0, vw * u1, vh * v1, vw * u0, vh * v1,
+                        p10.x, p10.y, p11.x, p11.y, p01.x, p01.y);
+                }
+            }
+        }
+
+        function bilerp(tl, tr, bl, br, u, v) {
+            return {
+                x: (1 - v) * ((1 - u) * tl.x + u * tr.x) + v * ((1 - u) * bl.x + u * br.x),
+                y: (1 - v) * ((1 - u) * tl.y + u * tr.y) + v * ((1 - u) * bl.y + u * br.y),
+            };
+        }
+
+        // Draw a textured triangle using affine transform
+        function drawTriangle(dCtx, img, sx0,sy0, sx1,sy1, sx2,sy2, dx0,dy0, dx1,dy1, dx2,dy2) {
+            dCtx.save();
+            dCtx.beginPath();
+            dCtx.moveTo(dx0, dy0);
+            dCtx.lineTo(dx1, dy1);
+            dCtx.lineTo(dx2, dy2);
+            dCtx.closePath();
+            dCtx.clip();
+
+            // Solve affine: source triangle → dest triangle
+            const denom = (sx0 * (sy1 - sy2) + sx1 * (sy2 - sy0) + sx2 * (sy0 - sy1));
+            if (Math.abs(denom) < 0.001) { dCtx.restore(); return; }
+
+            const m11 = (dx0 * (sy1 - sy2) + dx1 * (sy2 - sy0) + dx2 * (sy0 - sy1)) / denom;
+            const m12 = (dx0 * (sx2 - sx1) + dx1 * (sx0 - sx2) + dx2 * (sx1 - sx0)) / denom;
+            const m13 = (dx0 * (sx1*sy2 - sx2*sy1) + dx1 * (sx2*sy0 - sx0*sy2) + dx2 * (sx0*sy1 - sx1*sy0)) / denom;
+            const m21 = (dy0 * (sy1 - sy2) + dy1 * (sy2 - sy0) + dy2 * (sy0 - sy1)) / denom;
+            const m22 = (dy0 * (sx2 - sx1) + dy1 * (sx0 - sx2) + dy2 * (sx1 - sx0)) / denom;
+            const m23 = (dy0 * (sx1*sy2 - sx2*sy1) + dy1 * (sx2*sy0 - sx0*sy2) + dy2 * (sx0*sy1 - sx1*sy0)) / denom;
+
+            dCtx.setTransform(m11, m21, m12, m22, m13, m23);
+            dCtx.drawImage(img, 0, 0);
+            dCtx.restore();
         }
 
         // ─── Detect face ───
@@ -873,6 +1030,7 @@
         function animate(timestamp) {
             if (!running) return;
             syncCanvasSize();
+            drawWarpedVideo();
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
             if (timestamp - lastFaceDetect > FACE_DETECT_INTERVAL) {
@@ -911,8 +1069,10 @@
                 log('Error loading: ' + e.message);
                 console.error(e);
             }
-            try { await startCamera(); }
-            catch (e) { log('Camera error: ' + e.message); console.error(e); }
+            try {
+                await startCamera();
+                await populateCameraSelect();
+            } catch (e) { log('Camera error: ' + e.message); console.error(e); }
             startBtn.disabled = false;
             startBtn.textContent = 'Click to Start';
             log('Ready');
