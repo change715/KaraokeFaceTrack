@@ -1067,7 +1067,7 @@
             const textW = metrics.width;
             const textH = fontSize * 1.5;
             const padX = 28, padY = 12;
-            const boxW = Math.min(Math.max(textW + padX * 2, 200), 700);
+            const boxW = Math.max(textW + padX * 2, 200);
 
             // Position
             const cx = w / 2 + P.subX;
