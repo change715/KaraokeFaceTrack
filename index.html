@@ -76,25 +76,8 @@
             border-radius: 4px;
         }
 
-        /* ─── Subtitle box ─── */
-        #subtitle-box {
-            position: absolute;
-            bottom: 40px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.7);
-            padding: 12px 28px;
-            border-radius: 10px;
-            text-align: center;
-            z-index: 50;
-            pointer-events: none;
-            font-size: 1.2rem;
-            line-height: 1.5;
-            max-width: 700px;
-            min-width: 200px;
-            backdrop-filter: blur(6px);
-            -webkit-backdrop-filter: blur(6px);
-        }
+        /* ─── Subtitle box (hidden — now canvas-rendered) ─── */
+        #subtitle-box { display: none; }
 
         /* ─── Tweaks panel ─── */
         #tweaks-toggle {
@@ -349,15 +332,6 @@
             html += `<button class="tweak-btn" id="reset-defaults-btn" style="color:#ff8888;border-color:rgba(255,136,136,0.4);background:rgba(255,136,136,0.1)">Reset to Original Defaults</button>`;
             tweaksPanel.innerHTML = html;
 
-            function applySubtitleTransform() {
-                const flipX = lyricsFlipped ? ' scaleX(-1)' : '';
-                subtitleBox.style.bottom = P.subY + 'px';
-                subtitleBox.style.transform = `translateX(calc(-50% + ${P.subX}px)) scale(${P.subScale})${flipX}`;
-            }
-            applySubtitleTransform();
-
-            const subKeys = new Set(['subX', 'subY', 'subScale']);
-
             // Sync slider → number input
             tweaksPanel.querySelectorAll('input[type="range"]').forEach(inp => {
                 inp.addEventListener('input', () => {
@@ -365,7 +339,6 @@
                     P[key] = parseFloat(inp.value);
                     const numInp = document.getElementById('val-' + key);
                     numInp.value = Number.isInteger(P[key]) ? P[key] : P[key].toFixed(2);
-                    if (subKeys.has(key)) applySubtitleTransform();
                 });
             });
 
@@ -378,7 +351,6 @@
                     P[key] = v;
                     const slider = tweaksPanel.querySelector(`input[type="range"][data-key="${key}"]`);
                     slider.value = v;
-                    if (subKeys.has(key)) applySubtitleTransform();
                 });
             });
 
@@ -386,7 +358,6 @@
             document.getElementById('flip-lyrics-btn').addEventListener('click', () => {
                 lyricsFlipped = !lyricsFlipped;
                 P.lyricsFlipped = lyricsFlipped;
-                applySubtitleTransform();
             });
 
             // Set current values as default
@@ -420,7 +391,7 @@
                     const numInp = document.getElementById('val-' + key);
                     numInp.value = Number.isInteger(P[key]) ? P[key] : P[key].toFixed(2);
                 });
-                applySubtitleTransform();
+                lyricsFlipped = P.lyricsFlipped;
             });
         }
 
@@ -981,7 +952,9 @@
             }
         }
 
-        // ─── Karaoke-style subtitle ───
+        // ─── Karaoke-style subtitle (canvas-rendered) ───
+        let subtitleData = null; // { text, highlightChars } or null
+
         function updateSubtitle(currentTime) {
             let curIdx = -1;
             for (let i = 0; i < lyricsData.length; i++) {
@@ -994,40 +967,91 @@
                     if (currentTime < lyricsData[i].start) { curIdx = i; break; }
                 }
             }
-            if (curIdx === -1) { subtitleBox.innerHTML = ''; return; }
+            if (curIdx === -1) { subtitleData = null; return; }
 
             const seg = lyricsData[curIdx];
             const text = seg.particleText;
 
             if (currentTime < seg.start) {
-                // Upcoming — all dim
-                subtitleBox.innerHTML = `<span style="color:rgba(255,255,255,0.35)">${text}</span>`;
+                subtitleData = { text, highlightChars: -1 }; // -1 = all dim
                 return;
             }
 
-            // Gradual character-by-character highlight
             const progress = (currentTime - seg.start) / (seg.end - seg.start);
-            const highlightChars = progress * text.length;
+            subtitleData = { text, highlightChars: progress * text.length };
+        }
 
-            let html = '';
+        function renderSubtitle() {
+            if (!subtitleData) return;
+            const { text, highlightChars } = subtitleData;
+            const w = canvas.width, h = canvas.height;
+
+            const fontSize = 22 * P.subScale;
+            ctx.save();
+            ctx.font = `${fontSize}px sans-serif`;
+            ctx.textBaseline = 'top';
+
+            // Measure text
+            const metrics = ctx.measureText(text);
+            const textW = metrics.width;
+            const textH = fontSize * 1.5;
+            const padX = 28, padY = 12;
+            const boxW = Math.min(Math.max(textW + padX * 2, 200), 700);
+
+            // Position
+            const cx = w / 2 + P.subX;
+            const by = h - P.subY;
+            const boxX = cx - boxW / 2;
+            const boxY = by - textH - padY * 2;
+
+            // Apply flip
+            if (lyricsFlipped) {
+                ctx.translate(cx, 0);
+                ctx.scale(-1, 1);
+                ctx.translate(-cx, 0);
+            }
+
+            // Background
+            const r = 10;
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.beginPath();
+            ctx.moveTo(boxX + r, boxY);
+            ctx.lineTo(boxX + boxW - r, boxY);
+            ctx.quadraticCurveTo(boxX + boxW, boxY, boxX + boxW, boxY + r);
+            ctx.lineTo(boxX + boxW, boxY + textH + padY * 2 - r);
+            ctx.quadraticCurveTo(boxX + boxW, boxY + textH + padY * 2, boxX + boxW - r, boxY + textH + padY * 2);
+            ctx.lineTo(boxX + r, boxY + textH + padY * 2);
+            ctx.quadraticCurveTo(boxX, boxY + textH + padY * 2, boxX, boxY + textH + padY * 2 - r);
+            ctx.lineTo(boxX, boxY + r);
+            ctx.quadraticCurveTo(boxX, boxY, boxX + r, boxY);
+            ctx.closePath();
+            ctx.fill();
+
+            // Draw text character by character
+            const textX = cx - textW / 2;
+            const textY = boxY + padY;
+            let curX = textX;
+
             for (let i = 0; i < text.length; i++) {
                 const ch = text[i];
-                if (i < Math.floor(highlightChars)) {
-                    // Fully highlighted
-                    html += `<span style="color:#88aaff">${ch}</span>`;
+                if (highlightChars === -1) {
+                    // All dim
+                    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+                } else if (i < Math.floor(highlightChars)) {
+                    ctx.fillStyle = '#88aaff';
                 } else if (i < highlightChars) {
-                    // Partially highlighted — blend
                     const frac = highlightChars - i;
-                    const r = Math.round(255 - (255 - 136) * frac);
-                    const g = Math.round(255 - (255 - 170) * frac);
-                    const b = Math.round(255 + (255 - 255) * frac);
-                    html += `<span style="color:rgb(${r},${g},${b})">${ch}</span>`;
+                    const cr = Math.round(255 - (255 - 136) * frac);
+                    const cg = Math.round(255 - (255 - 170) * frac);
+                    ctx.fillStyle = `rgb(${cr},${cg},255)`;
                 } else {
-                    // Not yet
-                    html += `<span style="color:rgba(255,255,255,0.85)">${ch}</span>`;
+                    ctx.fillStyle = 'rgba(255,255,255,0.85)';
                 }
+                ctx.fillText(ch, curX, textY);
+                curX += ctx.measureText(ch).width;
             }
-            subtitleBox.innerHTML = html;
+
+            ctx.restore();
         }
 
         // ─── Lerp helper ───
@@ -1134,6 +1158,7 @@
             }
 
             renderParticles(timestamp);
+            renderSubtitle();
 
             // Mouth dot (hidden in clean mode)
             if (hasFace && !cleanMode) {
