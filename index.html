@@ -307,11 +307,19 @@
             imgScale:1, imgX:0, imgY:0, imgRotation:0,
             ksTLx:0, ksTLy:0, ksTRx:0, ksTRy:0,
             ksBLx:0, ksBLy:0, ksBRx:0, ksBRy:0,
+            ksET1x:0, ksET1y:0, ksET2x:0, ksET2y:0,
+            ksEB1x:0, ksEB1y:0, ksEB2x:0, ksEB2y:0,
+            ksEL1x:0, ksEL1y:0, ksEL2x:0, ksEL2y:0,
+            ksER1x:0, ksER1y:0, ksER2x:0, ksER2y:0,
             ksG11x:0, ksG11y:0, ksG12x:0, ksG12y:0,
             ksG21x:0, ksG21y:0, ksG22x:0, ksG22y:0,
             // Output keystone
             outTLx:0, outTLy:0, outTRx:0, outTRy:0,
             outBLx:0, outBLy:0, outBRx:0, outBRy:0,
+            outET1x:0, outET1y:0, outET2x:0, outET2y:0,
+            outEB1x:0, outEB1y:0, outEB2x:0, outEB2y:0,
+            outEL1x:0, outEL1y:0, outEL2x:0, outEL2y:0,
+            outER1x:0, outER1y:0, outER2x:0, outER2y:0,
             outG11x:0, outG11y:0, outG12x:0, outG12y:0,
             outG21x:0, outG21y:0, outG22x:0, outG22y:0,
             gridV1:0.333, gridV2:0.667, gridH1:0.333, gridH2:0.667,
@@ -467,11 +475,8 @@
             html += `<button class="tweak-btn" id="calibrate-btn">Calibrate Camera</button>`;
             html += `<button class="tweak-btn" id="calibrate-out-btn">Calibrate Output</button>`;
             html += `<div id="calib-controls" style="display:none;margin:6px 0">`;
+            html += `<button class="tweak-btn" id="calib-submode-btn" style="margin:4px 0">Switch to Grid Warp</button>`;
             html += `<div class="tweak-row"><label>Arrow nudge</label><select class="tweak-select" id="calib-corner-select" style="margin:0;flex:1">`;
-            html += `<option value="TL">Top-Left</option><option value="TR">Top-Right</option>`;
-            html += `<option value="BL">Bottom-Left</option><option value="BR">Bottom-Right</option>`;
-            html += `<option value="G11">Grid 1-1</option><option value="G12">Grid 1-2</option>`;
-            html += `<option value="G21">Grid 2-1</option><option value="G22">Grid 2-2</option>`;
             html += `</select></div>`;
             html += `<div class="tweak-row"><label>Nudge step %</label><input type="range" data-key="calibNudge" min="0.05" max="5" step="0.05" value="${P.calibNudge}"><input type="number" data-key="calibNudge" id="val-calibNudge" step="0.05" value="${P.calibNudge.toFixed(2)}"></div>`;
             html += `<div style="opacity:0.5;font-size:0.7rem;margin:2px 0 4px 0">Drag corners or use arrow keys (Shift=&frac14;x, Ctrl=4x)</div>`;
@@ -552,6 +557,31 @@
                 document.getElementById('grid-toggle-btn').textContent = showOutputGrid ? 'Hide Output Grid' : 'Show Output Grid';
             });
 
+            // Rebuild the corner/point selector dropdown for current sub-mode
+            function rebuildCalibSelect() {
+                const sel = document.getElementById('calib-corner-select');
+                if (!sel) return;
+                sel.innerHTML = '';
+                const points = calibSubMode === 'gridwarp' ? CALIB_ALL_GRID : CALIB_CORNERS;
+                const labels = {
+                    TL:'Top-Left', TR:'Top-Right', BL:'Bottom-Left', BR:'Bottom-Right',
+                    ET1:'Edge T1', ET2:'Edge T2', EB1:'Edge B1', EB2:'Edge B2',
+                    EL1:'Edge L1', EL2:'Edge L2', ER1:'Edge R1', ER2:'Edge R2',
+                    G11:'Grid 1-1', G12:'Grid 1-2', G21:'Grid 2-1', G22:'Grid 2-2',
+                };
+                for (const p of points) {
+                    const opt = document.createElement('option');
+                    opt.value = p;
+                    opt.textContent = labels[p] || p;
+                    sel.appendChild(opt);
+                }
+                // If selected corner not in list, reset to first
+                if (!points.includes(calibSelectedCorner)) {
+                    calibSelectedCorner = points[0];
+                }
+                sel.value = calibSelectedCorner;
+            }
+
             // Calibration toggle helper
             function toggleCalib(target) {
                 const wasActive = calibMode && calibTarget === target;
@@ -571,13 +601,23 @@
                     const btn = target === 'camera' ? 'calibrate-btn' : 'calibrate-out-btn';
                     document.getElementById(btn).textContent = 'Exit Calibration';
                     document.getElementById('calib-controls').style.display = '';
+                    document.getElementById('calib-submode-btn').textContent = calibSubMode === 'keystone' ? 'Switch to Grid Warp' : 'Switch to Keystone';
                     overlay.classList.add('active');
+                    rebuildCalibSelect();
                     updateCalibCorners();
                 }
             }
 
             document.getElementById('calibrate-btn').addEventListener('click', () => toggleCalib('camera'));
             document.getElementById('calibrate-out-btn').addEventListener('click', () => toggleCalib('output'));
+
+            // Sub-mode toggle
+            document.getElementById('calib-submode-btn').addEventListener('click', () => {
+                calibSubMode = calibSubMode === 'keystone' ? 'gridwarp' : 'keystone';
+                document.getElementById('calib-submode-btn').textContent = calibSubMode === 'keystone' ? 'Switch to Grid Warp' : 'Switch to Keystone';
+                rebuildCalibSelect();
+                updateCalibCorners();
+            });
 
             // Hide UI button
             document.getElementById('hide-ui-btn').addEventListener('click', () => {
@@ -634,8 +674,9 @@
         let showSplineViz    = false;
         let calibMode        = false;
         let calibTarget      = null; // 'camera' or 'output'
+        let calibSubMode     = 'keystone'; // 'keystone' or 'gridwarp'
         let calibSelectedCorner = 'TL';
-        let calibDragging    = null; // 'TL', 'TR', 'BL', 'BR' or null
+        let calibDragging    = null;
         let faceLandmarker   = null;
         let poseLandmarker   = null;
         let lyricsData       = [];
@@ -656,23 +697,38 @@
 
         // ─── Calibration: draggable corner handles ───
         const CALIB_CORNERS = ['TL', 'TR', 'BL', 'BR'];
+        const CALIB_EDGE_POINTS = ['ET1', 'ET2', 'EB1', 'EB2', 'EL1', 'EL2', 'ER1', 'ER2'];
         const CALIB_GRID_NODES = ['G11', 'G12', 'G21', 'G22'];
-        const CALIB_ALL_POINTS = [...CALIB_CORNERS, ...CALIB_GRID_NODES];
+        const CALIB_ALL_GRID = [...CALIB_CORNERS, ...CALIB_EDGE_POINTS, ...CALIB_GRID_NODES];
         const CALIB_KEY_MAPS = {
             camera: {
                 TL: ['ksTLx','ksTLy'], TR: ['ksTRx','ksTRy'], BL: ['ksBLx','ksBLy'], BR: ['ksBRx','ksBRy'],
+                ET1: ['ksET1x','ksET1y'], ET2: ['ksET2x','ksET2y'], EB1: ['ksEB1x','ksEB1y'], EB2: ['ksEB2x','ksEB2y'],
+                EL1: ['ksEL1x','ksEL1y'], EL2: ['ksEL2x','ksEL2y'], ER1: ['ksER1x','ksER1y'], ER2: ['ksER2x','ksER2y'],
                 G11: ['ksG11x','ksG11y'], G12: ['ksG12x','ksG12y'], G21: ['ksG21x','ksG21y'], G22: ['ksG22x','ksG22y'],
             },
             output: {
                 TL: ['outTLx','outTLy'], TR: ['outTRx','outTRy'], BL: ['outBLx','outBLy'], BR: ['outBRx','outBRy'],
+                ET1: ['outET1x','outET1y'], ET2: ['outET2x','outET2y'], EB1: ['outEB1x','outEB1y'], EB2: ['outEB2x','outEB2y'],
+                EL1: ['outEL1x','outEL1y'], EL2: ['outEL2x','outEL2y'], ER1: ['outER1x','outER1y'], ER2: ['outER2x','outER2y'],
                 G11: ['outG11x','outG11y'], G12: ['outG12x','outG12y'], G21: ['outG21x','outG21y'], G22: ['outG22x','outG22y'],
             },
         };
-        // Default normalized positions for corners (fixed) and grid nodes (from gridV/H params)
+        // Default normalized positions for all point types
         const CALIB_CORNER_POS = { TL: [0, 0], TR: [1, 0], BL: [0, 1], BR: [1, 1] };
         function getCalibDefaultPos(name) {
             if (CALIB_CORNER_POS[name]) return CALIB_CORNER_POS[name];
-            // Grid nodes: G{row}{col} → (gridV{col}, gridH{row})
+            // Edge points: E{edge}{index} — position on the border at grid line crossings
+            if (name.startsWith('E')) {
+                const edge = name[1], idx = parseInt(name[2]);
+                const t = idx === 1 ? P.gridV1 : P.gridV2;
+                const s = idx === 1 ? P.gridH1 : P.gridH2;
+                if (edge === 'T') return [t, 0];
+                if (edge === 'B') return [t, 1];
+                if (edge === 'L') return [0, s];
+                if (edge === 'R') return [1, s];
+            }
+            // Grid nodes: G{row}{col} → (gridV{row}, gridH{col})
             const row = parseInt(name[1]), col = parseInt(name[2]);
             return [row === 1 ? P.gridV1 : P.gridV2, col === 1 ? P.gridH1 : P.gridH2];
         }
@@ -709,12 +765,18 @@
             if (!calibMode) { overlay.innerHTML = ''; return; }
             overlay.innerHTML = '';
             const isOut = calibTarget === 'output';
-            for (const c of CALIB_ALL_POINTS) {
+            const isGridWarp = calibSubMode === 'gridwarp';
+
+            // Which points to show
+            const visiblePoints = isGridWarp ? CALIB_ALL_GRID : CALIB_CORNERS;
+
+            for (const c of visiblePoints) {
                 const pos = getCornerScreenPos(c);
+                const isEdge = CALIB_EDGE_POINTS.includes(c);
                 const isGrid = CALIB_GRID_NODES.includes(c);
                 // Handle
                 const handle = document.createElement('div');
-                handle.className = 'calib-corner' + (isOut ? ' output-mode' : '') + (c === calibSelectedCorner ? ' active' : '') + (isGrid ? ' grid-point' : '');
+                handle.className = 'calib-corner' + (isOut ? ' output-mode' : '') + (c === calibSelectedCorner ? ' active' : '') + ((isGrid || isEdge) ? ' grid-point' : '');
                 handle.style.left = pos.x + 'px';
                 handle.style.top = pos.y + 'px';
                 handle.dataset.corner = c;
@@ -738,7 +800,7 @@
                 });
             }
 
-            // Draw border and grid lines on a canvas overlay
+            // Draw lines on a canvas overlay
             let lineCanvas = overlay.querySelector('canvas');
             if (!lineCanvas) {
                 lineCanvas = document.createElement('canvas');
@@ -751,20 +813,9 @@
             const borderColor = isOut ? 'rgba(136,170,255,0.5)' : 'rgba(0,255,0,0.5)';
             const gridColor = isOut ? 'rgba(136,170,255,0.35)' : 'rgba(0,255,0,0.35)';
 
-            // Get corner positions
+            // Get all point positions
             const ptTL = getCornerScreenPos('TL'), ptTR = getCornerScreenPos('TR');
             const ptBL = getCornerScreenPos('BL'), ptBR = getCornerScreenPos('BR');
-            // Get grid node positions
-            const ptG11 = getCornerScreenPos('G11'), ptG12 = getCornerScreenPos('G12');
-            const ptG21 = getCornerScreenPos('G21'), ptG22 = getCornerScreenPos('G22');
-
-            // Edge points: purely interpolated from corners (pinned to border)
-            const v1 = P.gridV1, v2 = P.gridV2, h1 = P.gridH1, h2 = P.gridH2;
-            function lerp2(a, b, t) { return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }; }
-            const eT1 = lerp2(ptTL, ptTR, v1), eT2 = lerp2(ptTL, ptTR, v2);
-            const eB1 = lerp2(ptBL, ptBR, v1), eB2 = lerp2(ptBL, ptBR, v2);
-            const eL1 = lerp2(ptTL, ptBL, h1), eL2 = lerp2(ptTL, ptBL, h2);
-            const eR1 = lerp2(ptTR, ptBR, h1), eR2 = lerp2(ptTR, ptBR, h2);
 
             // Border outline (corners only)
             lctx.strokeStyle = borderColor;
@@ -777,39 +828,48 @@
             lctx.closePath();
             lctx.stroke();
 
-            // Horizontal grid lines (edge → G nodes → edge)
-            lctx.strokeStyle = gridColor;
-            lctx.lineWidth = 1;
-            lctx.setLineDash([6, 4]);
-            // H-line 1: eL1 → G11 → G21 → eR1
-            lctx.beginPath();
-            lctx.moveTo(eL1.x, eL1.y);
-            lctx.lineTo(ptG11.x, ptG11.y);
-            lctx.lineTo(ptG21.x, ptG21.y);
-            lctx.lineTo(eR1.x, eR1.y);
-            lctx.stroke();
-            // H-line 2: eL2 → G12 → G22 → eR2
-            lctx.beginPath();
-            lctx.moveTo(eL2.x, eL2.y);
-            lctx.lineTo(ptG12.x, ptG12.y);
-            lctx.lineTo(ptG22.x, ptG22.y);
-            lctx.lineTo(eR2.x, eR2.y);
-            lctx.stroke();
-            // V-line 1: eT1 → G11 → G12 → eB1
-            lctx.beginPath();
-            lctx.moveTo(eT1.x, eT1.y);
-            lctx.lineTo(ptG11.x, ptG11.y);
-            lctx.lineTo(ptG12.x, ptG12.y);
-            lctx.lineTo(eB1.x, eB1.y);
-            lctx.stroke();
-            // V-line 2: eT2 → G21 → G22 → eB2
-            lctx.beginPath();
-            lctx.moveTo(eT2.x, eT2.y);
-            lctx.lineTo(ptG21.x, ptG21.y);
-            lctx.lineTo(ptG22.x, ptG22.y);
-            lctx.lineTo(eB2.x, eB2.y);
-            lctx.stroke();
-            lctx.setLineDash([]);
+            // Grid lines only in gridwarp mode
+            if (isGridWarp) {
+                const ptET1 = getCornerScreenPos('ET1'), ptET2 = getCornerScreenPos('ET2');
+                const ptEB1 = getCornerScreenPos('EB1'), ptEB2 = getCornerScreenPos('EB2');
+                const ptEL1 = getCornerScreenPos('EL1'), ptEL2 = getCornerScreenPos('EL2');
+                const ptER1 = getCornerScreenPos('ER1'), ptER2 = getCornerScreenPos('ER2');
+                const ptG11 = getCornerScreenPos('G11'), ptG12 = getCornerScreenPos('G12');
+                const ptG21 = getCornerScreenPos('G21'), ptG22 = getCornerScreenPos('G22');
+
+                lctx.strokeStyle = gridColor;
+                lctx.lineWidth = 1;
+                lctx.setLineDash([6, 4]);
+                // H-line 1: EL1 → G11 → G21 → ER1
+                lctx.beginPath();
+                lctx.moveTo(ptEL1.x, ptEL1.y);
+                lctx.lineTo(ptG11.x, ptG11.y);
+                lctx.lineTo(ptG21.x, ptG21.y);
+                lctx.lineTo(ptER1.x, ptER1.y);
+                lctx.stroke();
+                // H-line 2: EL2 → G12 → G22 → ER2
+                lctx.beginPath();
+                lctx.moveTo(ptEL2.x, ptEL2.y);
+                lctx.lineTo(ptG12.x, ptG12.y);
+                lctx.lineTo(ptG22.x, ptG22.y);
+                lctx.lineTo(ptER2.x, ptER2.y);
+                lctx.stroke();
+                // V-line 1: ET1 → G11 → G12 → EB1
+                lctx.beginPath();
+                lctx.moveTo(ptET1.x, ptET1.y);
+                lctx.lineTo(ptG11.x, ptG11.y);
+                lctx.lineTo(ptG12.x, ptG12.y);
+                lctx.lineTo(ptEB1.x, ptEB1.y);
+                lctx.stroke();
+                // V-line 2: ET2 → G21 → G22 → EB2
+                lctx.beginPath();
+                lctx.moveTo(ptET2.x, ptET2.y);
+                lctx.lineTo(ptG21.x, ptG21.y);
+                lctx.lineTo(ptG22.x, ptG22.y);
+                lctx.lineTo(ptEB2.x, ptEB2.y);
+                lctx.stroke();
+                lctx.setLineDash([]);
+            }
         }
 
         // Global mouse move/up for dragging
@@ -1015,11 +1075,15 @@
             // 4 interior grid nodes (adjustable)
             const g11 = pt('G11', v1, h1), g12 = pt('G12', v1, h2);
             const g21 = pt('G21', v2, h1), g22 = pt('G22', v2, h2);
-            // 8 edge points: purely interpolated from corners (pinned to border)
-            const eT1 = lerp2(tl, tr, v1), eT2 = lerp2(tl, tr, v2);
-            const eB1 = lerp2(bl, br, v1), eB2 = lerp2(bl, br, v2);
-            const eL1 = lerp2(tl, bl, h1), eL2 = lerp2(tl, bl, h2);
-            const eR1 = lerp2(tr, br, h1), eR2 = lerp2(tr, br, h2);
+            // 8 edge points: corner interpolation + their own offset params
+            function ept(name, base) {
+                const kx = prefix + name + 'x', ky = prefix + name + 'y';
+                return { x: base.x + w * ((P[kx] || 0) / 100), y: base.y + h * ((P[ky] || 0) / 100) };
+            }
+            const eT1 = ept('ET1', lerp2(tl, tr, v1)), eT2 = ept('ET2', lerp2(tl, tr, v2));
+            const eB1 = ept('EB1', lerp2(bl, br, v1)), eB2 = ept('EB2', lerp2(bl, br, v2));
+            const eL1 = ept('EL1', lerp2(tl, bl, h1)), eL2 = ept('EL2', lerp2(tl, bl, h2));
+            const eR1 = ept('ER1', lerp2(tr, br, h1)), eR2 = ept('ER2', lerp2(tr, br, h2));
 
             return {
                 pts: [
@@ -1048,7 +1112,7 @@
         }
 
         function hasGridWarp(prefix) {
-            for (const name of CALIB_GRID_NODES) {
+            for (const name of [...CALIB_GRID_NODES, ...CALIB_EDGE_POINTS]) {
                 if ((P[prefix + name + 'x'] || 0) !== 0 || (P[prefix + name + 'y'] || 0) !== 0) return true;
             }
             return false;
