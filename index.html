@@ -1060,7 +1060,7 @@
             const fontSize = 22 * P.subScale;
             ctx.save();
             ctx.font = `${fontSize}px sans-serif`;
-            ctx.textBaseline = 'top';
+            ctx.textBaseline = 'middle';
 
             // Measure text
             const metrics = ctx.measureText(text);
@@ -1100,7 +1100,8 @@
 
             // Draw text character by character (centered in box)
             const textX = boxX + (boxW - textW) / 2;
-            const textY = boxY + padY;
+            const boxH = textH + padY * 2;
+            const textY = boxY + boxH / 2;
             let curX = textX;
 
             for (let i = 0; i < text.length; i++) {
