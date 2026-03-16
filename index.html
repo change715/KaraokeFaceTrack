@@ -209,6 +209,40 @@
         .tweak-accordion.open .tweak-accordion-body {
             display: block;
         }
+        /* ─── Calibration overlay ─── */
+        .calib-corner {
+            position: absolute;
+            width: 24px; height: 24px;
+            border: 2px solid #0f0;
+            border-radius: 50%;
+            background: rgba(0,255,0,0.25);
+            cursor: grab;
+            z-index: 180;
+            transform: translate(-50%, -50%);
+            pointer-events: auto;
+        }
+        .calib-corner.active { border-color: #ff0; background: rgba(255,255,0,0.35); }
+        .calib-corner:hover { background: rgba(0,255,0,0.5); }
+        .calib-label {
+            position: absolute;
+            color: #0f0;
+            font-size: 0.65rem;
+            font-family: monospace;
+            pointer-events: none;
+            z-index: 181;
+            text-shadow: 0 0 3px #000, 0 0 6px #000;
+            transform: translate(-50%, 14px);
+        }
+        .calib-label.active { color: #ff0; }
+        #calib-overlay {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 175;
+            pointer-events: none;
+            display: none;
+        }
+        #calib-overlay.active { display: block; }
     </style>
 </head>
 <body>
@@ -217,6 +251,7 @@
         <canvas id="webcam-display"></canvas>
         <canvas id="overlay"></canvas>
         <div id="subtitle-box"></div>
+        <div id="calib-overlay"></div>
         <div id="status">Loading...</div>
         <button id="tweaks-toggle">Parameters</button>
         <div id="tweaks-panel"></div>
@@ -387,6 +422,14 @@
             html += `<div style="display:flex;gap:6px;margin:10px 0 4px 0"><button class="tweak-btn" id="play-btn" style="margin:0;flex:1">Play</button><button class="tweak-btn" id="pause-btn" style="margin:0;flex:1">Pause</button><button class="tweak-btn" id="restart-btn" style="margin:0;flex:1">Restart</button></div>`;
             html += `<button class="tweak-btn" id="flip-lyrics-btn">Flip Lyrics Horizontally</button>`;
             html += `<button class="tweak-btn" id="mirror-cam-btn">${P.cameraMirrored ? 'Unmirror Camera' : 'Mirror Camera'}</button>`;
+            html += `<button class="tweak-btn" id="calibrate-btn">Calibrate Camera</button>`;
+            html += `<div id="calib-controls" style="display:none;margin:6px 0">`;
+            html += `<div class="tweak-row"><label>Arrow nudge</label><select class="tweak-select" id="calib-corner-select" style="margin:0;flex:1">`;
+            html += `<option value="TL">Top-Left</option><option value="TR">Top-Right</option>`;
+            html += `<option value="BL">Bottom-Left</option><option value="BR">Bottom-Right</option>`;
+            html += `</select></div>`;
+            html += `<div style="opacity:0.5;font-size:0.7rem;margin:2px 0 4px 0">Drag corners or use arrow keys (hold Shift for fine, Ctrl for large)</div>`;
+            html += `</div>`;
             html += `<button class="tweak-btn" id="grid-toggle-btn">Show Output Grid</button>`;
             html += `<button class="tweak-btn" id="set-defaults-btn">Set Current as Default</button>`;
             html += `<button class="tweak-btn" id="reset-defaults-btn" style="color:#ff8888;border-color:rgba(255,136,136,0.4);background:rgba(255,136,136,0.1)">Reset to Original Defaults</button>`;
@@ -457,6 +500,20 @@
                 document.getElementById('grid-toggle-btn').textContent = showOutputGrid ? 'Hide Output Grid' : 'Show Output Grid';
             });
 
+            // Calibrate camera button
+            document.getElementById('calibrate-btn').addEventListener('click', () => {
+                calibMode = !calibMode;
+                document.getElementById('calibrate-btn').textContent = calibMode ? 'Exit Calibration' : 'Calibrate Camera';
+                document.getElementById('calib-controls').style.display = calibMode ? '' : 'none';
+                const overlay = document.getElementById('calib-overlay');
+                overlay.classList.toggle('active', calibMode);
+                if (calibMode) {
+                    updateCalibCorners();
+                } else {
+                    overlay.innerHTML = '';
+                }
+            });
+
             // Hide UI button
             document.getElementById('hide-ui-btn').addEventListener('click', () => {
                 toggleCleanMode();
@@ -509,6 +566,9 @@
         let lyricsFlipped    = P.lyricsFlipped;
         let cameraMirrored   = P.cameraMirrored;
         let showOutputGrid   = false;
+        let calibMode        = false;
+        let calibSelectedCorner = 'TL';
+        let calibDragging    = null; // 'TL', 'TR', 'BL', 'BR' or null
         let faceLandmarker   = null;
         let poseLandmarker   = null;
         let lyricsData       = [];
@@ -526,6 +586,107 @@
         let particles        = [];
         let lastSegmentIndex = -1;
         let charSpawnIndex   = 0;
+
+        // ─── Calibration: draggable corner handles ───
+        const CALIB_CORNERS = ['TL', 'TR', 'BL', 'BR'];
+        const CALIB_KEY_MAP = { TL: ['ksTLx','ksTLy'], TR: ['ksTRx','ksTRy'], BL: ['ksBLx','ksBLy'], BR: ['ksBRx','ksBRy'] };
+
+        function getCornerScreenPos(corner) {
+            const w = dispCanvas.clientWidth, h = dispCanvas.clientHeight;
+            const kx = CALIB_KEY_MAP[corner][0], ky = CALIB_KEY_MAP[corner][1];
+            const isRight = corner.includes('R'), isBottom = corner.includes('B');
+            const x = isRight ? w * (1 + P[kx] / 100) : w * (P[kx] / 100);
+            const y = isBottom ? h * (1 + P[ky] / 100) : h * (P[ky] / 100);
+            return { x, y };
+        }
+
+        function screenPosToParam(corner, sx, sy) {
+            const w = dispCanvas.clientWidth, h = dispCanvas.clientHeight;
+            const kx = CALIB_KEY_MAP[corner][0], ky = CALIB_KEY_MAP[corner][1];
+            const isRight = corner.includes('R'), isBottom = corner.includes('B');
+            P[kx] = isRight ? (sx / w - 1) * 100 : (sx / w) * 100;
+            P[ky] = isBottom ? (sy / h - 1) * 100 : (sy / h) * 100;
+            // Sync slider/number UI
+            for (const k of [kx, ky]) {
+                const slider = tweaksPanel.querySelector(`input[type="range"][data-key="${k}"]`);
+                const numInp = document.getElementById('val-' + k);
+                if (slider) slider.value = P[k];
+                if (numInp) numInp.value = P[k].toFixed(2);
+            }
+        }
+
+        function updateCalibCorners() {
+            const overlay = document.getElementById('calib-overlay');
+            if (!calibMode) { overlay.innerHTML = ''; return; }
+            overlay.innerHTML = '';
+            for (const c of CALIB_CORNERS) {
+                const pos = getCornerScreenPos(c);
+                // Handle
+                const handle = document.createElement('div');
+                handle.className = 'calib-corner' + (c === calibSelectedCorner ? ' active' : '');
+                handle.style.left = pos.x + 'px';
+                handle.style.top = pos.y + 'px';
+                handle.dataset.corner = c;
+                // Label
+                const label = document.createElement('div');
+                label.className = 'calib-label' + (c === calibSelectedCorner ? ' active' : '');
+                label.style.left = pos.x + 'px';
+                label.style.top = pos.y + 'px';
+                label.textContent = c;
+                overlay.appendChild(handle);
+                overlay.appendChild(label);
+
+                // Mouse down → start drag
+                handle.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    calibDragging = c;
+                    calibSelectedCorner = c;
+                    const sel = document.getElementById('calib-corner-select');
+                    if (sel) sel.value = c;
+                    updateCalibCorners();
+                });
+            }
+
+            // Draw lines between corners on a small canvas
+            let lineCanvas = overlay.querySelector('canvas');
+            if (!lineCanvas) {
+                lineCanvas = document.createElement('canvas');
+                lineCanvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none';
+                overlay.insertBefore(lineCanvas, overlay.firstChild);
+            }
+            lineCanvas.width = dispCanvas.clientWidth;
+            lineCanvas.height = dispCanvas.clientHeight;
+            const lctx = lineCanvas.getContext('2d');
+            const pts = CALIB_CORNERS.map(c => getCornerScreenPos(c));
+            lctx.strokeStyle = 'rgba(0,255,0,0.5)';
+            lctx.lineWidth = 1;
+            lctx.beginPath();
+            lctx.moveTo(pts[0].x, pts[0].y); // TL
+            lctx.lineTo(pts[1].x, pts[1].y); // TR
+            lctx.lineTo(pts[3].x, pts[3].y); // BR
+            lctx.lineTo(pts[2].x, pts[2].y); // BL
+            lctx.closePath();
+            lctx.stroke();
+        }
+
+        // Global mouse move/up for dragging
+        document.addEventListener('mousemove', (e) => {
+            if (!calibDragging) return;
+            const rect = dispCanvas.getBoundingClientRect();
+            const sx = e.clientX - rect.left;
+            const sy = e.clientY - rect.top;
+            screenPosToParam(calibDragging, sx, sy);
+            updateCalibCorners();
+        });
+        document.addEventListener('mouseup', () => { calibDragging = null; });
+
+        // Corner select dropdown sync
+        document.addEventListener('change', (e) => {
+            if (e.target.id === 'calib-corner-select') {
+                calibSelectedCorner = e.target.value;
+                updateCalibCorners();
+            }
+        });
 
         function log(msg) {
             console.log('[Karaoke]', msg);
@@ -1416,6 +1577,7 @@
 
             applyOutputWarp();
             if (showOutputGrid) renderOutputGrid();
+            if (calibMode && !calibDragging) updateCalibCorners();
 
             requestAnimationFrame(animate);
         }
@@ -1461,6 +1623,26 @@
             statusEl.style.display = cleanMode ? 'none' : '';
         }
         document.addEventListener('keydown', (e) => {
+            // Arrow key nudge for calibration
+            if (calibMode && ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
+                e.preventDefault();
+                const step = e.ctrlKey || e.metaKey ? 2.0 : e.shiftKey ? 0.1 : 0.5;
+                const c = calibSelectedCorner;
+                const kx = CALIB_KEY_MAP[c][0], ky = CALIB_KEY_MAP[c][1];
+                if (e.key === 'ArrowLeft')  P[kx] -= step;
+                if (e.key === 'ArrowRight') P[kx] += step;
+                if (e.key === 'ArrowUp')    P[ky] -= step;
+                if (e.key === 'ArrowDown')  P[ky] += step;
+                // Sync UI
+                for (const k of [kx, ky]) {
+                    const slider = tweaksPanel.querySelector(`input[type="range"][data-key="${k}"]`);
+                    const numInp = document.getElementById('val-' + k);
+                    if (slider) slider.value = P[k];
+                    if (numInp) numInp.value = P[k].toFixed(2);
+                }
+                updateCalibCorners();
+                return;
+            }
             if (e.key === '1') {
                 toggleCleanMode();
             }
