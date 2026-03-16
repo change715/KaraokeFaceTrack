@@ -271,6 +271,7 @@
             outBLx:0, outBLy:0, outBRx:0, outBRy:0,
             outScale:1, outImgX:0, outImgY:0, outRotation:0,
             lyricsFlipped: true,
+            cameraMirrored: true,
             cameraDeviceId: '',
         };
 
@@ -385,6 +386,7 @@
             }
             html += `<div style="display:flex;gap:6px;margin:10px 0 4px 0"><button class="tweak-btn" id="play-btn" style="margin:0;flex:1">Play</button><button class="tweak-btn" id="pause-btn" style="margin:0;flex:1">Pause</button><button class="tweak-btn" id="restart-btn" style="margin:0;flex:1">Restart</button></div>`;
             html += `<button class="tweak-btn" id="flip-lyrics-btn">Flip Lyrics Horizontally</button>`;
+            html += `<button class="tweak-btn" id="mirror-cam-btn">${P.cameraMirrored ? 'Unmirror Camera' : 'Mirror Camera'}</button>`;
             html += `<button class="tweak-btn" id="grid-toggle-btn">Show Output Grid</button>`;
             html += `<button class="tweak-btn" id="set-defaults-btn">Set Current as Default</button>`;
             html += `<button class="tweak-btn" id="reset-defaults-btn" style="color:#ff8888;border-color:rgba(255,136,136,0.4);background:rgba(255,136,136,0.1)">Reset to Original Defaults</button>`;
@@ -442,6 +444,13 @@
                 P.lyricsFlipped = lyricsFlipped;
             });
 
+            // Mirror camera button
+            document.getElementById('mirror-cam-btn').addEventListener('click', () => {
+                cameraMirrored = !cameraMirrored;
+                P.cameraMirrored = cameraMirrored;
+                document.getElementById('mirror-cam-btn').textContent = cameraMirrored ? 'Unmirror Camera' : 'Mirror Camera';
+            });
+
             // Grid toggle button
             document.getElementById('grid-toggle-btn').addEventListener('click', () => {
                 showOutputGrid = !showOutputGrid;
@@ -460,6 +469,7 @@
                     if (d.key) saved[d.key] = P[d.key];
                 }
                 saved.lyricsFlipped = lyricsFlipped;
+                saved.cameraMirrored = cameraMirrored;
                 saved.cameraDeviceId = currentDeviceId;
                 // Download as params.json for user to replace in project folder
                 const blob = new Blob([JSON.stringify(saved, null, 4) + '\n'], { type: 'application/json' });
@@ -485,6 +495,9 @@
                     numInp.value = Number.isInteger(P[key]) ? P[key] : P[key].toFixed(2);
                 });
                 lyricsFlipped = P.lyricsFlipped;
+                cameraMirrored = P.cameraMirrored;
+                if (document.getElementById('mirror-cam-btn'))
+                    document.getElementById('mirror-cam-btn').textContent = cameraMirrored ? 'Unmirror Camera' : 'Mirror Camera';
             });
         }
 
@@ -494,6 +507,7 @@
 
         // ─── State ───
         let lyricsFlipped    = P.lyricsFlipped;
+        let cameraMirrored   = P.cameraMirrored;
         let showOutputGrid   = false;
         let faceLandmarker   = null;
         let poseLandmarker   = null;
@@ -687,17 +701,22 @@
             const vw = video.videoWidth, vh = video.videoHeight;
             const crop = coverRect(vw, vh, w, h);
 
-            // Corner positions (mirrored X for webcam)
+            // Corner positions
             const tl = { x: w * (P.ksTLx / 100),           y: h * (P.ksTLy / 100) };
             const tr = { x: w * (1 + P.ksTRx / 100),       y: h * (P.ksTRy / 100) };
             const bl = { x: w * (P.ksBLx / 100),           y: h * (1 + P.ksBLy / 100) };
             const br = { x: w * (1 + P.ksBRx / 100),       y: h * (1 + P.ksBRy / 100) };
 
-            // Mirror X (webcam flip)
-            let mtl = { x: w - tl.x, y: tl.y };
-            let mtr = { x: w - tr.x, y: tr.y };
-            let mbl = { x: w - bl.x, y: bl.y };
-            let mbr = { x: w - br.x, y: br.y };
+            // Mirror X if cameraMirrored
+            let mtl, mtr, mbl, mbr;
+            if (cameraMirrored) {
+                mtl = { x: w - tl.x, y: tl.y };
+                mtr = { x: w - tr.x, y: tr.y };
+                mbl = { x: w - bl.x, y: bl.y };
+                mbr = { x: w - br.x, y: br.y };
+            } else {
+                mtl = { ...tl }; mtr = { ...tr }; mbl = { ...bl }; mbr = { ...br };
+            }
 
             // Apply image transform (scale, position, rotation) to corners
             const hasImgTransform = P.imgScale !== 1 || P.imgX !== 0 || P.imgY !== 0 || P.imgRotation !== 0;
@@ -718,10 +737,12 @@
                             P.ksBLx !== 0 || P.ksBLy !== 0 || P.ksBRx !== 0 || P.ksBRy !== 0;
 
             if (!hasWarp && !hasImgTransform) {
-                // No warp or transform — simple mirrored draw with cover crop
+                // No warp or transform — simple draw with cover crop
                 dispCtx.save();
-                dispCtx.translate(w, 0);
-                dispCtx.scale(-1, 1);
+                if (cameraMirrored) {
+                    dispCtx.translate(w, 0);
+                    dispCtx.scale(-1, 1);
+                }
                 dispCtx.drawImage(video, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, w, h);
                 dispCtx.restore();
                 return;
