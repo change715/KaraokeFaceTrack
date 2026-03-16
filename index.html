@@ -220,6 +220,9 @@
         const dispCtx     = dispCanvas.getContext('2d');
         const canvas      = document.getElementById('overlay');
         const ctx         = canvas.getContext('2d');
+        // Offscreen canvas for rendering particles before output warp
+        const offCanvas   = document.createElement('canvas');
+        const offCtx      = offCanvas.getContext('2d');
         const statusEl    = document.getElementById('status');
         const subtitleBox = document.getElementById('subtitle-box');
         const startScreen = document.getElementById('startScreen');
@@ -245,6 +248,9 @@
             subX:0, subY:40, subScale:1,
             ksTLx:0, ksTLy:0, ksTRx:0, ksTRy:0,
             ksBLx:0, ksBLy:0, ksBRx:0, ksBRy:0,
+            // Output keystone
+            outTLx:0, outTLy:0, outTRx:0, outTRy:0,
+            outBLx:0, outBLy:0, outBRx:0, outBRy:0,
             lyricsFlipped: true,
             cameraDeviceId: '',
         };
@@ -310,6 +316,18 @@
                 { section: 'Keystone — Bottom Right' },
                 { key: 'ksBRx',        label: 'BR X %',        min: -50, max: 50, step: 0.5 },
                 { key: 'ksBRy',        label: 'BR Y %',        min: -50, max: 50, step: 0.5 },
+                { section: 'Output Warp — Top Left' },
+                { key: 'outTLx',       label: 'TL X %',        min: -50, max: 50, step: 0.5 },
+                { key: 'outTLy',       label: 'TL Y %',        min: -50, max: 50, step: 0.5 },
+                { section: 'Output Warp — Top Right' },
+                { key: 'outTRx',       label: 'TR X %',        min: -50, max: 50, step: 0.5 },
+                { key: 'outTRy',       label: 'TR Y %',        min: -50, max: 50, step: 0.5 },
+                { section: 'Output Warp — Bottom Left' },
+                { key: 'outBLx',       label: 'BL X %',        min: -50, max: 50, step: 0.5 },
+                { key: 'outBLy',       label: 'BL Y %',        min: -50, max: 50, step: 0.5 },
+                { section: 'Output Warp — Bottom Right' },
+                { key: 'outBRx',       label: 'BR X %',        min: -50, max: 50, step: 0.5 },
+                { key: 'outBRy',       label: 'BR Y %',        min: -50, max: 50, step: 0.5 },
             ];
 
             // Camera selector
@@ -572,6 +590,7 @@
             if (w > 0 && h > 0 && (canvas.width !== w || canvas.height !== h)) {
                 canvas.width = w; canvas.height = h;
                 dispCanvas.width = w; dispCanvas.height = h;
+                offCanvas.width = w; offCanvas.height = h;
             }
         }
 
@@ -687,6 +706,47 @@
             dCtx.setTransform(m11, m21, m12, m22, m13, m23);
             dCtx.drawImage(img, 0, 0);
             dCtx.restore();
+        }
+
+        // ─── Output warp: corner-pin the overlay ───
+        function applyOutputWarp() {
+            const w = canvas.width, h = canvas.height;
+            const hasWarp = P.outTLx !== 0 || P.outTLy !== 0 || P.outTRx !== 0 || P.outTRy !== 0 ||
+                            P.outBLx !== 0 || P.outBLy !== 0 || P.outBRx !== 0 || P.outBRy !== 0;
+            if (!hasWarp) return; // offCtx content already on canvas, nothing to do
+
+            // Copy canvas content to offscreen, then warp back
+            offCtx.clearRect(0, 0, w, h);
+            offCtx.drawImage(canvas, 0, 0);
+            ctx.clearRect(0, 0, w, h);
+
+            const tl = { x: w * (P.outTLx / 100),       y: h * (P.outTLy / 100) };
+            const tr = { x: w * (1 + P.outTRx / 100),   y: h * (P.outTRy / 100) };
+            const bl = { x: w * (P.outBLx / 100),       y: h * (1 + P.outBLy / 100) };
+            const br = { x: w * (1 + P.outBRx / 100),   y: h * (1 + P.outBRy / 100) };
+
+            const divs = 8;
+            for (let gy = 0; gy < divs; gy++) {
+                for (let gx = 0; gx < divs; gx++) {
+                    const u0 = gx / divs, u1 = (gx + 1) / divs;
+                    const v0 = gy / divs, v1 = (gy + 1) / divs;
+
+                    const srcX0 = w * u0, srcX1 = w * u1;
+                    const srcY0 = h * v0, srcY1 = h * v1;
+
+                    const p00 = bilerp(tl, tr, bl, br, u0, v0);
+                    const p10 = bilerp(tl, tr, bl, br, u1, v0);
+                    const p01 = bilerp(tl, tr, bl, br, u0, v1);
+                    const p11 = bilerp(tl, tr, bl, br, u1, v1);
+
+                    drawTriangle(ctx, offCanvas,
+                        srcX0, srcY0, srcX1, srcY0, srcX0, srcY1,
+                        p00.x, p00.y, p10.x, p10.y, p01.x, p01.y);
+                    drawTriangle(ctx, offCanvas,
+                        srcX1, srcY0, srcX1, srcY1, srcX0, srcY1,
+                        p10.x, p10.y, p11.x, p11.y, p01.x, p01.y);
+                }
+            }
         }
 
         // ─── Detect face ───
@@ -1085,6 +1145,8 @@
                 ctx.fill();
                 ctx.restore();
             }
+
+            applyOutputWarp();
 
             requestAnimationFrame(animate);
         }

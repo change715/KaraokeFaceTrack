@@ -34,6 +34,14 @@
     "ksBLy": 0,
     "ksBRx": 0,
     "ksBRy": 0,
+    "outTLx": 0,
+    "outTLy": 0,
+    "outTRx": 0,
+    "outTRy": 0,
+    "outBLx": 0,
+    "outBLy": 0,
+    "outBRx": 0,
+    "outBRy": 0,
     "lyricsFlipped": true,
     "cameraDeviceId": ""
 }
