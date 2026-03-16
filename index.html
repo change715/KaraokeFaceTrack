@@ -296,6 +296,7 @@
             charSize:80, charLifetime:4, noiseAmp:7, noiseFreq:2.5,
             mouthSmooth:0.8, fadeInStart:0, fadeInEnd:0.12,
             cp1Along:-0.5, cp1Perp:0.48, cp2Along:0.19, cp2Perp:0.24,
+            midX:0.15, midY:0.35,
             targetX:0, targetY:0.2,
             colorStartR:255, colorStartG:255, colorStartB:255,
             colorEndR:220, colorEndG:50, colorEndB:50,
@@ -352,6 +353,8 @@
                 { key: 'cp1Perp',      label: 'CP1 perp',      min: -1.0, max: 1.0, step: 0.01 },
                 { key: 'cp2Along',     label: 'CP2 along',     min: -1.5, max: 2.0, step: 0.01 },
                 { key: 'cp2Perp',      label: 'CP2 perp',      min: -1.0, max: 1.0, step: 0.01 },
+                { key: 'midX',         label: 'Mid X %',       min: 0, max: 1.0, step: 0.01 },
+                { key: 'midY',         label: 'Mid Y %',       min: 0, max: 1.0, step: 0.01 },
                 { key: 'targetX',      label: 'Target X %',    min: 0, max: 0.4, step: 0.01 },
                 { key: 'targetY',      label: 'Target Y %',    min: 0, max: 0.4, step: 0.01 },
                 { key: 'targetNoise',  label: 'End noise',     min: 0, max: 60, step: 1 },
@@ -1288,30 +1291,47 @@
         }
 
         // ─── Get particle position ───
-        // Each particle has its own spline: from its birth mouth pos → fixed upper-left target
+        // Two-segment cubic bezier: start → CP1 → mid, mid → CP2 → target
         function getParticlePos(p, t) {
             const W = canvas.width, H = canvas.height;
-            // Target: upper-left area of the screen with per-particle vertical noise
+            // Target with per-particle vertical noise
             const tx = W * P.targetX;
             const tyBase = H * P.targetY;
             const targetOffset = (Math.sin(p.seed * 7.13) * 0.5 + Math.sin(p.seed * 3.71) * 0.3 + Math.sin(p.seed * 11.3) * 0.2) * P.targetNoise;
             const ty = tyBase + targetOffset;
-            // Vector from start to target
-            const dx = tx - p.startX;
-            const dy = ty - p.startY;
-            // Perpendicular direction
-            const len = Math.sqrt(dx*dx + dy*dy) || 1;
-            const perpX = -dy / len;
-            const perpY =  dx / len;
-            // Control points: along = distance along start→target, perp = perpendicular offset
-            const cp1x = p.startX + dx * P.cp1Along + perpX * len * P.cp1Perp;
-            const cp1y = p.startY + dy * P.cp1Along + perpY * len * P.cp1Perp;
-            const cp2x = p.startX + dx * P.cp2Along + perpX * len * P.cp2Perp;
-            const cp2y = p.startY + dy * P.cp2Along + perpY * len * P.cp2Perp;
+            // Fixed midpoint
+            const mx = W * P.midX;
+            const my = H * P.midY;
 
-            const x = cubicBezier(t, p.startX, cp1x, cp2x, tx);
-            const y = cubicBezier(t, p.startY, cp1y, cp2y, ty);
-            return { x, y };
+            // --- Segment 1: start → mid ---
+            const dx1 = mx - p.startX, dy1 = my - p.startY;
+            const len1 = Math.sqrt(dx1*dx1 + dy1*dy1) || 1;
+            const perp1x = -dy1 / len1, perp1y = dx1 / len1;
+            const cp1x = p.startX + dx1 * P.cp1Along + perp1x * len1 * P.cp1Perp;
+            const cp1y = p.startY + dy1 * P.cp1Along + perp1y * len1 * P.cp1Perp;
+
+            // --- Segment 2: mid → target ---
+            const dx2 = tx - mx, dy2 = ty - my;
+            const len2 = Math.sqrt(dx2*dx2 + dy2*dy2) || 1;
+            const perp2x = -dy2 / len2, perp2y = dx2 / len2;
+            const cp2x = mx + dx2 * P.cp2Along + perp2x * len2 * P.cp2Perp;
+            const cp2y = my + dy2 * P.cp2Along + perp2y * len2 * P.cp2Perp;
+
+            if (t <= 0.5) {
+                // First half: start → cp1 → cp1 → mid (quadratic-like via cubic)
+                const lt = t * 2;
+                return {
+                    x: cubicBezier(lt, p.startX, cp1x, cp1x, mx),
+                    y: cubicBezier(lt, p.startY, cp1y, cp1y, my),
+                };
+            } else {
+                // Second half: mid → cp2 → cp2 → target
+                const lt = (t - 0.5) * 2;
+                return {
+                    x: cubicBezier(lt, mx, cp2x, cp2x, tx),
+                    y: cubicBezier(lt, my, cp2y, cp2y, ty),
+                };
+            }
         }
 
         // ─── Spawn characters ───
@@ -1536,16 +1556,25 @@
                     const tyBase = H * P.targetY;
                     const targetOffset = (Math.sin(seed * 7.13) * 0.5 + Math.sin(seed * 3.71) * 0.3 + Math.sin(seed * 11.3) * 0.2) * P.targetNoise;
                     const ty = tyBase + targetOffset;
-                    const dx = tx - fakeP.startX, dy = ty - fakeP.startY;
-                    const len = Math.sqrt(dx*dx + dy*dy) || 1;
-                    const perpX = -dy / len, perpY = dx / len;
-                    const cp1x = fakeP.startX + dx * P.cp1Along + perpX * len * P.cp1Perp;
-                    const cp1y = fakeP.startY + dy * P.cp1Along + perpY * len * P.cp1Perp;
-                    const cp2x = fakeP.startX + dx * P.cp2Along + perpX * len * P.cp2Perp;
-                    const cp2y = fakeP.startY + dy * P.cp2Along + perpY * len * P.cp2Perp;
+                    const mx = W * P.midX, my = H * P.midY;
+                    // Segment 1: start → mid
+                    const dx1 = mx - fakeP.startX, dy1 = my - fakeP.startY;
+                    const len1 = Math.sqrt(dx1*dx1 + dy1*dy1) || 1;
+                    const perp1x = -dy1 / len1, perp1y = dx1 / len1;
+                    const cp1x = fakeP.startX + dx1 * P.cp1Along + perp1x * len1 * P.cp1Perp;
+                    const cp1y = fakeP.startY + dy1 * P.cp1Along + perp1y * len1 * P.cp1Perp;
+                    // Segment 2: mid → target
+                    const dx2 = tx - mx, dy2 = ty - my;
+                    const len2 = Math.sqrt(dx2*dx2 + dy2*dy2) || 1;
+                    const perp2x = -dy2 / len2, perp2y = dx2 / len2;
+                    const cp2x = mx + dx2 * P.cp2Along + perp2x * len2 * P.cp2Perp;
+                    const cp2y = my + dy2 * P.cp2Along + perp2y * len2 * P.cp2Perp;
                     // CP1
                     ctx.fillStyle = 'rgba(255,100,100,0.8)';
                     ctx.beginPath(); ctx.arc(cp1x, cp1y, 5, 0, Math.PI * 2); ctx.fill();
+                    // Midpoint
+                    ctx.fillStyle = 'rgba(255,200,50,0.8)';
+                    ctx.beginPath(); ctx.arc(mx, my, 6, 0, Math.PI * 2); ctx.fill();
                     // CP2
                     ctx.fillStyle = 'rgba(100,100,255,0.8)';
                     ctx.beginPath(); ctx.arc(cp2x, cp2y, 5, 0, Math.PI * 2); ctx.fill();
@@ -1555,12 +1584,14 @@
                     // Start
                     ctx.fillStyle = 'rgba(255,255,100,0.8)';
                     ctx.beginPath(); ctx.arc(fakeP.startX, fakeP.startY, 5, 0, Math.PI * 2); ctx.fill();
-                    // Tangent lines to control points
+                    // Tangent lines
                     ctx.setLineDash([4, 4]);
                     ctx.strokeStyle = 'rgba(255,255,255,0.3)';
                     ctx.lineWidth = 1;
                     ctx.beginPath(); ctx.moveTo(fakeP.startX, fakeP.startY); ctx.lineTo(cp1x, cp1y); ctx.stroke();
-                    ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(cp2x, cp2y); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(cp1x, cp1y); ctx.lineTo(mx, my); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(cp2x, cp2y); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(cp2x, cp2y); ctx.lineTo(tx, ty); ctx.stroke();
                     ctx.setLineDash([]);
                 }
             }
