@@ -216,7 +216,7 @@
         audio.preload = 'auto';
 
         // ─── Tweakable params ───
-        const P = {
+        const P_DEFAULTS = {
             charSize:      80,
             charLifetime:  4,
             noiseAmp:      7,
@@ -237,6 +237,11 @@
             fadeEnd:       0.97,
             syncOffset:    0.00,
         };
+        // Load saved defaults from localStorage (if any)
+        const savedDefaults = (() => {
+            try { return JSON.parse(localStorage.getItem('karaoke-params')); } catch { return null; }
+        })();
+        const P = Object.assign({}, P_DEFAULTS, savedDefaults);
 
         // ─── Build tweaks UI ───
         function buildTweaksUI() {
@@ -283,6 +288,8 @@
                 </div>`;
             }
             html += `<button class="tweak-btn" id="flip-lyrics-btn">Flip Lyrics Horizontally</button>`;
+            html += `<button class="tweak-btn" id="set-defaults-btn">Set Current as Default</button>`;
+            html += `<button class="tweak-btn" id="reset-defaults-btn" style="color:#ff8888;border-color:rgba(255,136,136,0.4);background:rgba(255,136,136,0.1)">Reset to Original Defaults</button>`;
             tweaksPanel.innerHTML = html;
 
             // Sync slider → number input
@@ -313,6 +320,30 @@
                 subtitleBox.style.transform = lyricsFlipped
                     ? 'translateX(-50%) scaleX(-1)'
                     : 'translateX(-50%)';
+            });
+
+            // Set current values as default
+            document.getElementById('set-defaults-btn').addEventListener('click', (e) => {
+                const saved = {};
+                for (const d of defs) {
+                    if (d.key) saved[d.key] = P[d.key];
+                }
+                localStorage.setItem('karaoke-params', JSON.stringify(saved));
+                e.target.textContent = 'Saved!';
+                setTimeout(() => { e.target.textContent = 'Set Current as Default'; }, 1200);
+            });
+
+            // Reset to original defaults
+            document.getElementById('reset-defaults-btn').addEventListener('click', () => {
+                localStorage.removeItem('karaoke-params');
+                Object.assign(P, P_DEFAULTS);
+                // Update all sliders and number inputs
+                tweaksPanel.querySelectorAll('input[type="range"]').forEach(inp => {
+                    const key = inp.dataset.key;
+                    inp.value = P[key];
+                    const numInp = document.getElementById('val-' + key);
+                    numInp.value = Number.isInteger(P[key]) ? P[key] : P[key].toFixed(2);
+                });
             });
         }
 
