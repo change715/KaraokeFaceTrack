@@ -1098,8 +1098,8 @@
             ctx.closePath();
             ctx.fill();
 
-            // Draw text character by character
-            const textX = cx - textW / 2;
+            // Draw text character by character (centered in box)
+            const textX = boxX + (boxW - textW) / 2;
             const textY = boxY + padY;
             let curX = textX;
 
