@@ -1111,14 +1111,17 @@
             // 4 corners
             const tl = pt('TL', 0, 0), tr = pt('TR', 1, 0);
             const bl = pt('BL', 0, 1), br = pt('BR', 1, 1);
-            // 4 interior grid nodes (adjustable)
-            const g11 = pt('G11', v1, h1), g12 = pt('G12', v1, h2);
-            const g21 = pt('G21', v2, h1), g22 = pt('G22', v2, h2);
-            // 8 edge points: corner interpolation + their own offset params
+            // Offset point: base position (from corners) + own param offset
             function ept(name, base) {
                 const kx = prefix + name + 'x', ky = prefix + name + 'y';
                 return { x: base.x + w * ((P[kx] || 0) / 100), y: base.y + h * ((P[ky] || 0) / 100) };
             }
+            // 4 interior grid nodes: bilinear from corners + own offset
+            const g11 = ept('G11', bilerp(tl, tr, bl, br, v1, h1));
+            const g12 = ept('G12', bilerp(tl, tr, bl, br, v1, h2));
+            const g21 = ept('G21', bilerp(tl, tr, bl, br, v2, h1));
+            const g22 = ept('G22', bilerp(tl, tr, bl, br, v2, h2));
+            // 8 edge points: corner interpolation + own offset
             const eT1 = ept('ET1', lerp2(tl, tr, v1)), eT2 = ept('ET2', lerp2(tl, tr, v2));
             const eB1 = ept('EB1', lerp2(bl, br, v1)), eB2 = ept('EB2', lerp2(bl, br, v2));
             const eL1 = ept('EL1', lerp2(tl, bl, h1)), eL2 = ept('EL2', lerp2(tl, bl, h2));
