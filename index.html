@@ -689,7 +689,7 @@
         // Try face landmarks → face nose fallback → returns false if no face detected
         function tryFaceDetect(ts, timestamp) {
             if (!faceLandmarker) return false;
-            const results = faceLandmarker.detectForVideo(video, ts);
+            const results = faceLandmarker.detectForVideo(dispCanvas, ts);
             if (!results.faceLandmarks || results.faceLandmarks.length === 0) return false;
 
             const lm = results.faceLandmarks[0];
@@ -708,7 +708,7 @@
                 return false;
             }
 
-            const rawX = (1.0 - trackX) * canvas.width;
+            const rawX = trackX * canvas.width;
             const rawY = trackY * canvas.height;
 
             // Face yaw
@@ -716,7 +716,7 @@
             const faceCX = (rightEdge.x + leftEdge.x) / 2;
             const faceW = Math.abs(rightEdge.x - leftEdge.x);
             const rawYaw = faceW > 0.001
-                ? -((nose.x - faceCX) / (faceW * 0.5))
+                ? (nose.x - faceCX) / (faceW * 0.5)
                 : 0;
 
             // Face pitch
@@ -742,7 +742,7 @@
             if (ts <= lastPoseDetectTs) return false;
             lastPoseDetectTs = ts;
 
-            const results = poseLandmarker.detectForVideo(video, ts);
+            const results = poseLandmarker.detectForVideo(dispCanvas, ts);
             if (!results.landmarks || results.landmarks.length === 0) return false;
 
             const lm = results.landmarks[0];
@@ -760,7 +760,7 @@
                 trackY = nose.y + 0.04; // offset down toward mouth
             }
 
-            const rawX = (1.0 - trackX) * canvas.width;
+            const rawX = trackX * canvas.width;
             const rawY = trackY * canvas.height;
 
             // Estimate yaw from shoulders
@@ -770,7 +770,7 @@
                 const shoulderCX = (lShoulder.x + rShoulder.x) / 2;
                 const shoulderW = Math.abs(lShoulder.x - rShoulder.x);
                 if (shoulderW > 0.01) {
-                    estYaw = -((nose.x - shoulderCX) / (shoulderW * 0.5));
+                    estYaw = (nose.x - shoulderCX) / (shoulderW * 0.5);
                     estYaw = Math.max(-1, Math.min(1, estYaw));
                 }
             }
