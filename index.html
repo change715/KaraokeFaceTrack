@@ -262,7 +262,7 @@
             colorEndR:220, colorEndG:50, colorEndB:50,
             burstDistance:300, burstDuration:0.3, targetNoise:60,
             fadeStart:0.8, fadeEnd:0.97, syncOffset:0,
-            subX:0, subY:40, subScale:1,
+            subX:0, subY:40, subScale:1, subMaxWidth:600,
             ksTLx:0, ksTLy:0, ksTRx:0, ksTRy:0,
             ksBLx:0, ksBLy:0, ksBRx:0, ksBRy:0,
             // Output keystone
@@ -327,6 +327,7 @@
                 { key: 'subX',         label: 'Offset X (px)', min: -500, max: 500, step: 1 },
                 { key: 'subY',         label: 'Bottom (px)',   min: 0, max: 500, step: 1 },
                 { key: 'subScale',     label: 'Scale',         min: 0.3, max: 3.0, step: 0.05 },
+                { key: 'subMaxWidth',  label: 'Max width (px)', min: 100, max: 1600, step: 10 },
                 { accordionEnd: true },
                 { accordion: 'Camera Input Keystone' },
                 { key: 'ksTLx',        label: 'TL X %',        min: -50, max: 50, step: 0.5 },
@@ -1062,18 +1063,40 @@
             ctx.font = `${fontSize}px sans-serif`;
             ctx.textBaseline = 'middle';
 
-            // Measure text
-            const metrics = ctx.measureText(text);
-            const textW = metrics.width;
-            const textH = fontSize * 1.5;
+            const maxW = P.subMaxWidth * P.subScale;
+            const lineH = fontSize * 1.5;
             const padX = 28, padY = 12;
-            const boxW = Math.max(textW + padX * 2, 200);
 
-            // Position
+            // Word-wrap into lines, tracking character indices
+            const words = text.split(' ');
+            const lines = [];       // [{text, startIdx}]
+            let curLine = '';
+            let curIdx = 0;
+            for (let wi = 0; wi < words.length; wi++) {
+                const word = words[wi];
+                const test = curLine ? curLine + ' ' + word : word;
+                if (curLine && ctx.measureText(test).width > maxW) {
+                    lines.push({ text: curLine, startIdx: curIdx });
+                    curIdx += curLine.length + 1; // +1 for space
+                    curLine = word;
+                } else {
+                    curLine = test;
+                }
+            }
+            if (curLine) lines.push({ text: curLine, startIdx: curIdx });
+
+            // Compute box dimensions
+            let widestLine = 0;
+            for (const ln of lines) widestLine = Math.max(widestLine, ctx.measureText(ln.text).width);
+            const totalTextH = lineH * lines.length;
+            const boxW = Math.max(widestLine + padX * 2, 200);
+            const boxH = totalTextH + padY * 2;
+
+            // Position (anchored at bottom)
             const cx = w / 2 + P.subX;
             const by = h - P.subY;
             const boxX = cx - boxW / 2;
-            const boxY = by - textH - padY * 2;
+            const boxY = by - boxH;
 
             // Apply flip
             if (lyricsFlipped) {
@@ -1082,45 +1105,47 @@
                 ctx.translate(-cx, 0);
             }
 
-            // Background
+            // Background rounded rect
             const r = 10;
             ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
             ctx.beginPath();
             ctx.moveTo(boxX + r, boxY);
             ctx.lineTo(boxX + boxW - r, boxY);
             ctx.quadraticCurveTo(boxX + boxW, boxY, boxX + boxW, boxY + r);
-            ctx.lineTo(boxX + boxW, boxY + textH + padY * 2 - r);
-            ctx.quadraticCurveTo(boxX + boxW, boxY + textH + padY * 2, boxX + boxW - r, boxY + textH + padY * 2);
-            ctx.lineTo(boxX + r, boxY + textH + padY * 2);
-            ctx.quadraticCurveTo(boxX, boxY + textH + padY * 2, boxX, boxY + textH + padY * 2 - r);
+            ctx.lineTo(boxX + boxW, boxY + boxH - r);
+            ctx.quadraticCurveTo(boxX + boxW, boxY + boxH, boxX + boxW - r, boxY + boxH);
+            ctx.lineTo(boxX + r, boxY + boxH);
+            ctx.quadraticCurveTo(boxX, boxY + boxH, boxX, boxY + boxH - r);
             ctx.lineTo(boxX, boxY + r);
             ctx.quadraticCurveTo(boxX, boxY, boxX + r, boxY);
             ctx.closePath();
             ctx.fill();
 
-            // Draw text character by character (centered in box)
-            const textX = boxX + (boxW - textW) / 2;
-            const boxH = textH + padY * 2;
-            const textY = boxY + boxH / 2;
-            let curX = textX;
+            // Draw each line
+            for (let li = 0; li < lines.length; li++) {
+                const ln = lines[li];
+                const lnW = ctx.measureText(ln.text).width;
+                let curX = boxX + (boxW - lnW) / 2;
+                const curY = boxY + padY + lineH * li + lineH / 2;
 
-            for (let i = 0; i < text.length; i++) {
-                const ch = text[i];
-                if (highlightChars === -1) {
-                    // All dim
-                    ctx.fillStyle = 'rgba(255,255,255,0.35)';
-                } else if (i < Math.floor(highlightChars)) {
-                    ctx.fillStyle = '#88aaff';
-                } else if (i < highlightChars) {
-                    const frac = highlightChars - i;
-                    const cr = Math.round(255 - (255 - 136) * frac);
-                    const cg = Math.round(255 - (255 - 170) * frac);
-                    ctx.fillStyle = `rgb(${cr},${cg},255)`;
-                } else {
-                    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+                for (let ci = 0; ci < ln.text.length; ci++) {
+                    const ch = ln.text[ci];
+                    const gi = ln.startIdx + ci; // global char index
+                    if (highlightChars === -1) {
+                        ctx.fillStyle = 'rgba(255,255,255,0.35)';
+                    } else if (gi < Math.floor(highlightChars)) {
+                        ctx.fillStyle = '#88aaff';
+                    } else if (gi < highlightChars) {
+                        const frac = highlightChars - gi;
+                        const cr = Math.round(255 - (255 - 136) * frac);
+                        const cg = Math.round(255 - (255 - 170) * frac);
+                        ctx.fillStyle = `rgb(${cr},${cg},255)`;
+                    } else {
+                        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+                    }
+                    ctx.fillText(ch, curX, curY);
+                    curX += ctx.measureText(ch).width;
                 }
-                ctx.fillText(ch, curX, textY);
-                curX += ctx.measureText(ch).width;
             }
 
             ctx.restore();
