@@ -226,6 +226,7 @@
         .calib-corner.output-mode { border-color: #88aaff; background: rgba(136,170,255,0.25); }
         .calib-corner.output-mode:hover { background: rgba(136,170,255,0.5); }
         .calib-corner.output-mode.active { border-color: #ff0; background: rgba(255,255,0,0.35); }
+        .calib-corner.grid-point { width: 18px; height: 18px; border-style: dashed; }
         .calib-label {
             position: absolute;
             color: #0f0;
@@ -306,9 +307,15 @@
             imgScale:1, imgX:0, imgY:0, imgRotation:0,
             ksTLx:0, ksTLy:0, ksTRx:0, ksTRy:0,
             ksBLx:0, ksBLy:0, ksBRx:0, ksBRy:0,
+            ksTCx:0, ksTCy:0, ksBCx:0, ksBCy:0,
+            ksLCx:0, ksLCy:0, ksRCx:0, ksRCy:0,
+            ksCCx:0, ksCCy:0,
             // Output keystone
             outTLx:0, outTLy:0, outTRx:0, outTRy:0,
             outBLx:0, outBLy:0, outBRx:0, outBRy:0,
+            outTCx:0, outTCy:0, outBCx:0, outBCy:0,
+            outLCx:0, outLCy:0, outRCx:0, outRCy:0,
+            outCCx:0, outCCy:0,
             outScale:1, outImgX:0, outImgY:0, outRotation:0,
             lyricsFlipped: true,
             cameraMirrored: false,
@@ -392,6 +399,16 @@
                 { key: 'ksBLy',        label: 'BL Y %',        min: -50, max: 50, step: 0.5 },
                 { key: 'ksBRx',        label: 'BR X %',        min: -50, max: 50, step: 0.5 },
                 { key: 'ksBRy',        label: 'BR Y %',        min: -50, max: 50, step: 0.5 },
+                { key: 'ksTCx',        label: 'TC X %',        min: -50, max: 50, step: 0.5 },
+                { key: 'ksTCy',        label: 'TC Y %',        min: -50, max: 50, step: 0.5 },
+                { key: 'ksBCx',        label: 'BC X %',        min: -50, max: 50, step: 0.5 },
+                { key: 'ksBCy',        label: 'BC Y %',        min: -50, max: 50, step: 0.5 },
+                { key: 'ksLCx',        label: 'LC X %',        min: -50, max: 50, step: 0.5 },
+                { key: 'ksLCy',        label: 'LC Y %',        min: -50, max: 50, step: 0.5 },
+                { key: 'ksRCx',        label: 'RC X %',        min: -50, max: 50, step: 0.5 },
+                { key: 'ksRCy',        label: 'RC Y %',        min: -50, max: 50, step: 0.5 },
+                { key: 'ksCCx',        label: 'CC X %',        min: -50, max: 50, step: 0.5 },
+                { key: 'ksCCy',        label: 'CC Y %',        min: -50, max: 50, step: 0.5 },
                 { accordionEnd: true },
                 { accordion: 'Output Warp' },
                 { key: 'outTLx',       label: 'TL X %',        min: -50, max: 50, step: 0.5 },
@@ -402,6 +419,16 @@
                 { key: 'outBLy',       label: 'BL Y %',        min: -50, max: 50, step: 0.5 },
                 { key: 'outBRx',       label: 'BR X %',        min: -50, max: 50, step: 0.5 },
                 { key: 'outBRy',       label: 'BR Y %',        min: -50, max: 50, step: 0.5 },
+                { key: 'outTCx',       label: 'TC X %',        min: -50, max: 50, step: 0.5 },
+                { key: 'outTCy',       label: 'TC Y %',        min: -50, max: 50, step: 0.5 },
+                { key: 'outBCx',       label: 'BC X %',        min: -50, max: 50, step: 0.5 },
+                { key: 'outBCy',       label: 'BC Y %',        min: -50, max: 50, step: 0.5 },
+                { key: 'outLCx',       label: 'LC X %',        min: -50, max: 50, step: 0.5 },
+                { key: 'outLCy',       label: 'LC Y %',        min: -50, max: 50, step: 0.5 },
+                { key: 'outRCx',       label: 'RC X %',        min: -50, max: 50, step: 0.5 },
+                { key: 'outRCy',       label: 'RC Y %',        min: -50, max: 50, step: 0.5 },
+                { key: 'outCCx',       label: 'CC X %',        min: -50, max: 50, step: 0.5 },
+                { key: 'outCCy',       label: 'CC Y %',        min: -50, max: 50, step: 0.5 },
                 { accordionEnd: true },
                 { accordion: 'Output Transform' },
                 { key: 'outScale',     label: 'Scale',          min: 0.1, max: 3.0, step: 0.05 },
@@ -442,6 +469,9 @@
             html += `<div class="tweak-row"><label>Arrow nudge</label><select class="tweak-select" id="calib-corner-select" style="margin:0;flex:1">`;
             html += `<option value="TL">Top-Left</option><option value="TR">Top-Right</option>`;
             html += `<option value="BL">Bottom-Left</option><option value="BR">Bottom-Right</option>`;
+            html += `<option value="TC">Top-Center</option><option value="BC">Bottom-Center</option>`;
+            html += `<option value="LC">Left-Center</option><option value="RC">Right-Center</option>`;
+            html += `<option value="CC">Center</option>`;
             html += `</select></div>`;
             html += `<div class="tweak-row"><label>Nudge step %</label><input type="range" data-key="calibNudge" min="0.05" max="5" step="0.05" value="${P.calibNudge}"><input type="number" data-key="calibNudge" id="val-calibNudge" step="0.05" value="${P.calibNudge.toFixed(2)}"></div>`;
             html += `<div style="opacity:0.5;font-size:0.7rem;margin:2px 0 4px 0">Drag corners or use arrow keys (Shift=&frac14;x, Ctrl=4x)</div>`;
@@ -626,9 +656,22 @@
 
         // ─── Calibration: draggable corner handles ───
         const CALIB_CORNERS = ['TL', 'TR', 'BL', 'BR'];
+        const CALIB_GRID_POINTS = ['TC', 'BC', 'LC', 'RC', 'CC'];
+        const CALIB_ALL_POINTS = [...CALIB_CORNERS, ...CALIB_GRID_POINTS];
         const CALIB_KEY_MAPS = {
-            camera: { TL: ['ksTLx','ksTLy'], TR: ['ksTRx','ksTRy'], BL: ['ksBLx','ksBLy'], BR: ['ksBRx','ksBRy'] },
-            output: { TL: ['outTLx','outTLy'], TR: ['outTRx','outTRy'], BL: ['outBLx','outBLy'], BR: ['outBRx','outBRy'] },
+            camera: {
+                TL: ['ksTLx','ksTLy'], TR: ['ksTRx','ksTRy'], BL: ['ksBLx','ksBLy'], BR: ['ksBRx','ksBRy'],
+                TC: ['ksTCx','ksTCy'], BC: ['ksBCx','ksBCy'], LC: ['ksLCx','ksLCy'], RC: ['ksRCx','ksRCy'], CC: ['ksCCx','ksCCy'],
+            },
+            output: {
+                TL: ['outTLx','outTLy'], TR: ['outTRx','outTRy'], BL: ['outBLx','outBLy'], BR: ['outBRx','outBRy'],
+                TC: ['outTCx','outTCy'], BC: ['outBCx','outBCy'], LC: ['outLCx','outLCy'], RC: ['outRCx','outRCy'], CC: ['outCCx','outCCy'],
+            },
+        };
+        // Default normalized positions for each point (u, v in 0..1)
+        const CALIB_DEFAULT_POS = {
+            TL: [0, 0], TR: [1, 0], BL: [0, 1], BR: [1, 1],
+            TC: [0.5, 0], BC: [0.5, 1], LC: [0, 0.5], RC: [1, 0.5], CC: [0.5, 0.5],
         };
         function getCalibKeyMap() { return CALIB_KEY_MAPS[calibTarget] || CALIB_KEY_MAPS.camera; }
 
@@ -636,9 +679,9 @@
             const keyMap = getCalibKeyMap();
             const w = dispCanvas.clientWidth, h = dispCanvas.clientHeight;
             const kx = keyMap[corner][0], ky = keyMap[corner][1];
-            const isRight = corner.includes('R'), isBottom = corner.includes('B');
-            const x = isRight ? w * (1 + P[kx] / 100) : w * (P[kx] / 100);
-            const y = isBottom ? h * (1 + P[ky] / 100) : h * (P[ky] / 100);
+            const [du, dv] = CALIB_DEFAULT_POS[corner];
+            const x = w * (du + P[kx] / 100);
+            const y = h * (dv + P[ky] / 100);
             return { x, y };
         }
 
@@ -646,9 +689,9 @@
             const keyMap = getCalibKeyMap();
             const w = dispCanvas.clientWidth, h = dispCanvas.clientHeight;
             const kx = keyMap[corner][0], ky = keyMap[corner][1];
-            const isRight = corner.includes('R'), isBottom = corner.includes('B');
-            P[kx] = isRight ? (sx / w - 1) * 100 : (sx / w) * 100;
-            P[ky] = isBottom ? (sy / h - 1) * 100 : (sy / h) * 100;
+            const [du, dv] = CALIB_DEFAULT_POS[corner];
+            P[kx] = (sx / w - du) * 100;
+            P[ky] = (sy / h - dv) * 100;
             // Sync slider/number UI
             for (const k of [kx, ky]) {
                 const slider = tweaksPanel.querySelector(`input[type="range"][data-key="${k}"]`);
@@ -662,12 +705,13 @@
             const overlay = document.getElementById('calib-overlay');
             if (!calibMode) { overlay.innerHTML = ''; return; }
             overlay.innerHTML = '';
-            for (const c of CALIB_CORNERS) {
+            const isOut = calibTarget === 'output';
+            for (const c of CALIB_ALL_POINTS) {
                 const pos = getCornerScreenPos(c);
+                const isGrid = CALIB_GRID_POINTS.includes(c);
                 // Handle
                 const handle = document.createElement('div');
-                const isOut = calibTarget === 'output';
-                handle.className = 'calib-corner' + (isOut ? ' output-mode' : '') + (c === calibSelectedCorner ? ' active' : '');
+                handle.className = 'calib-corner' + (isOut ? ' output-mode' : '') + (c === calibSelectedCorner ? ' active' : '') + (isGrid ? ' grid-point' : '');
                 handle.style.left = pos.x + 'px';
                 handle.style.top = pos.y + 'px';
                 handle.dataset.corner = c;
@@ -691,7 +735,7 @@
                 });
             }
 
-            // Draw lines between corners on a small canvas
+            // Draw lines between corners and grid lines on a canvas
             let lineCanvas = overlay.querySelector('canvas');
             if (!lineCanvas) {
                 lineCanvas = document.createElement('canvas');
@@ -701,16 +745,48 @@
             lineCanvas.width = dispCanvas.clientWidth;
             lineCanvas.height = dispCanvas.clientHeight;
             const lctx = lineCanvas.getContext('2d');
-            const pts = CALIB_CORNERS.map(c => getCornerScreenPos(c));
-            lctx.strokeStyle = calibTarget === 'output' ? 'rgba(136,170,255,0.5)' : 'rgba(0,255,0,0.5)';
+            const borderColor = isOut ? 'rgba(136,170,255,0.5)' : 'rgba(0,255,0,0.5)';
+            const gridColor = isOut ? 'rgba(136,170,255,0.35)' : 'rgba(0,255,0,0.35)';
+
+            // Get all 9 point positions
+            const ptTL = getCornerScreenPos('TL'), ptTR = getCornerScreenPos('TR');
+            const ptBL = getCornerScreenPos('BL'), ptBR = getCornerScreenPos('BR');
+            const ptTC = getCornerScreenPos('TC'), ptBC = getCornerScreenPos('BC');
+            const ptLC = getCornerScreenPos('LC'), ptRC = getCornerScreenPos('RC');
+            const ptCC = getCornerScreenPos('CC');
+
+            // Border outline
+            lctx.strokeStyle = borderColor;
             lctx.lineWidth = 1;
             lctx.beginPath();
-            lctx.moveTo(pts[0].x, pts[0].y); // TL
-            lctx.lineTo(pts[1].x, pts[1].y); // TR
-            lctx.lineTo(pts[3].x, pts[3].y); // BR
-            lctx.lineTo(pts[2].x, pts[2].y); // BL
+            lctx.moveTo(ptTL.x, ptTL.y);
+            lctx.lineTo(ptTC.x, ptTC.y);
+            lctx.lineTo(ptTR.x, ptTR.y);
+            lctx.lineTo(ptRC.x, ptRC.y);
+            lctx.lineTo(ptBR.x, ptBR.y);
+            lctx.lineTo(ptBC.x, ptBC.y);
+            lctx.lineTo(ptBL.x, ptBL.y);
+            lctx.lineTo(ptLC.x, ptLC.y);
             lctx.closePath();
             lctx.stroke();
+
+            // Horizontal grid line: LC → CC → RC
+            lctx.strokeStyle = gridColor;
+            lctx.lineWidth = 1;
+            lctx.setLineDash([6, 4]);
+            lctx.beginPath();
+            lctx.moveTo(ptLC.x, ptLC.y);
+            lctx.lineTo(ptCC.x, ptCC.y);
+            lctx.lineTo(ptRC.x, ptRC.y);
+            lctx.stroke();
+
+            // Vertical grid line: TC → CC → BC
+            lctx.beginPath();
+            lctx.moveTo(ptTC.x, ptTC.y);
+            lctx.lineTo(ptCC.x, ptCC.y);
+            lctx.lineTo(ptBC.x, ptBC.y);
+            lctx.stroke();
+            lctx.setLineDash([]);
         }
 
         // Global mouse move/up for dragging
@@ -897,6 +973,43 @@
             return { sx, sy, sw, sh };
         }
 
+        // Compute the 9 grid control points for a given prefix ('ks' or 'out')
+        function getGridPoints9(prefix, w, h) {
+            const g = {};
+            for (const [name, [du, dv]] of Object.entries(CALIB_DEFAULT_POS)) {
+                const kx = prefix + name + 'x', ky = prefix + name + 'y';
+                g[name] = { x: w * (du + (P[kx] || 0) / 100), y: h * (dv + (P[ky] || 0) / 100) };
+            }
+            return g;
+        }
+
+        // Warp a 2x2 patch grid using 9 control points. Maps (u,v) in [0,1] to screen pos.
+        // The 4 patches: [TL,TC,LC,CC], [TC,TR,CC,RC], [LC,CC,BL,BC], [CC,RC,BC,BR]
+        function gridWarpPoint(g, u, v) {
+            let ptl, ptr, pbl, pbr, lu, lv;
+            if (u <= 0.5 && v <= 0.5) {
+                ptl = g.TL; ptr = g.TC; pbl = g.LC; pbr = g.CC;
+                lu = u * 2; lv = v * 2;
+            } else if (u > 0.5 && v <= 0.5) {
+                ptl = g.TC; ptr = g.TR; pbl = g.CC; pbr = g.RC;
+                lu = (u - 0.5) * 2; lv = v * 2;
+            } else if (u <= 0.5 && v > 0.5) {
+                ptl = g.LC; ptr = g.CC; pbl = g.BL; pbr = g.BC;
+                lu = u * 2; lv = (v - 0.5) * 2;
+            } else {
+                ptl = g.CC; ptr = g.RC; pbl = g.BC; pbr = g.BR;
+                lu = (u - 0.5) * 2; lv = (v - 0.5) * 2;
+            }
+            return bilerp(ptl, ptr, pbl, pbr, lu, lv);
+        }
+
+        function hasGridWarp(prefix) {
+            for (const name of CALIB_GRID_POINTS) {
+                if ((P[prefix + name + 'x'] || 0) !== 0 || (P[prefix + name + 'y'] || 0) !== 0) return true;
+            }
+            return false;
+        }
+
         function drawWarpedVideo() {
             const w = dispCanvas.width, h = dispCanvas.height;
             if (!w || !h || video.readyState < 2) return;
@@ -906,43 +1019,12 @@
             const vw = video.videoWidth, vh = video.videoHeight;
             const crop = coverRect(vw, vh, w, h);
 
-            // Corner positions
-            const tl = { x: w * (P.ksTLx / 100),           y: h * (P.ksTLy / 100) };
-            const tr = { x: w * (1 + P.ksTRx / 100),       y: h * (P.ksTRy / 100) };
-            const bl = { x: w * (P.ksBLx / 100),           y: h * (1 + P.ksBLy / 100) };
-            const br = { x: w * (1 + P.ksBRx / 100),       y: h * (1 + P.ksBRy / 100) };
-
-            // Mirror X if cameraMirrored
-            let mtl, mtr, mbl, mbr;
-            if (cameraMirrored) {
-                mtl = { x: w - tl.x, y: tl.y };
-                mtr = { x: w - tr.x, y: tr.y };
-                mbl = { x: w - bl.x, y: bl.y };
-                mbr = { x: w - br.x, y: br.y };
-            } else {
-                mtl = { ...tl }; mtr = { ...tr }; mbl = { ...bl }; mbr = { ...br };
-            }
-
-            // Apply image transform (scale, position, rotation) to corners
-            const hasImgTransform = P.imgScale !== 1 || P.imgX !== 0 || P.imgY !== 0 || P.imgRotation !== 0;
-            if (hasImgTransform) {
-                const cx = w / 2, cy = h / 2;
-                const s = P.imgScale;
-                const rad = P.imgRotation * Math.PI / 180;
-                const cosR = Math.cos(rad), sinR = Math.sin(rad);
-                const tx = P.imgX, ty = P.imgY;
-                function xfPt(p) {
-                    let x = (p.x - cx) * s, y = (p.y - cy) * s;
-                    return { x: x * cosR - y * sinR + cx + tx, y: x * sinR + y * cosR + cy + ty };
-                }
-                mtl = xfPt(mtl); mtr = xfPt(mtr); mbl = xfPt(mbl); mbr = xfPt(mbr);
-            }
-
             const hasWarp = P.ksTLx !== 0 || P.ksTLy !== 0 || P.ksTRx !== 0 || P.ksTRy !== 0 ||
                             P.ksBLx !== 0 || P.ksBLy !== 0 || P.ksBRx !== 0 || P.ksBRy !== 0;
+            const hasGrid = hasGridWarp('ks');
+            const hasImgTransform = P.imgScale !== 1 || P.imgX !== 0 || P.imgY !== 0 || P.imgRotation !== 0;
 
-            if (!hasWarp && !hasImgTransform) {
-                // No warp or transform — simple draw with cover crop
+            if (!hasWarp && !hasGrid && !hasImgTransform) {
                 dispCtx.save();
                 if (cameraMirrored) {
                     dispCtx.translate(w, 0);
@@ -953,6 +1035,29 @@
                 return;
             }
 
+            // Build 9-point grid
+            let g = getGridPoints9('ks', w, h);
+
+            // Mirror X if cameraMirrored
+            if (cameraMirrored) {
+                for (const name of Object.keys(g)) {
+                    g[name] = { x: w - g[name].x, y: g[name].y };
+                }
+            }
+
+            // Apply image transform
+            if (hasImgTransform) {
+                const cx = w / 2, cy = h / 2;
+                const s = P.imgScale;
+                const rad = P.imgRotation * Math.PI / 180;
+                const cosR = Math.cos(rad), sinR = Math.sin(rad);
+                const tx = P.imgX, ty = P.imgY;
+                for (const name of Object.keys(g)) {
+                    let x = (g[name].x - cx) * s, y = (g[name].y - cy) * s;
+                    g[name] = { x: x * cosR - y * sinR + cx + tx, y: x * sinR + y * cosR + cy + ty };
+                }
+            }
+
             // Subdivide into grid for smooth warp
             const divs = 8;
             for (let gy = 0; gy < divs; gy++) {
@@ -960,17 +1065,14 @@
                     const u0 = gx / divs, u1 = (gx + 1) / divs;
                     const v0 = gy / divs, v1 = (gy + 1) / divs;
 
-                    // Source coords within the cropped region
                     const srcX0 = crop.sx + crop.sw * u0, srcX1 = crop.sx + crop.sw * u1;
                     const srcY0 = crop.sy + crop.sh * v0, srcY1 = crop.sy + crop.sh * v1;
 
-                    // Bilinear interpolation of corner positions
-                    const p00 = bilerp(mtl, mtr, mbl, mbr, u0, v0);
-                    const p10 = bilerp(mtl, mtr, mbl, mbr, u1, v0);
-                    const p01 = bilerp(mtl, mtr, mbl, mbr, u0, v1);
-                    const p11 = bilerp(mtl, mtr, mbl, mbr, u1, v1);
+                    const p00 = gridWarpPoint(g, u0, v0);
+                    const p10 = gridWarpPoint(g, u1, v0);
+                    const p01 = gridWarpPoint(g, u0, v1);
+                    const p11 = gridWarpPoint(g, u1, v1);
 
-                    // Draw two triangles per cell
                     drawTriangle(dispCtx, video,
                         srcX0, srcY0, srcX1, srcY0, srcX0, srcY1,
                         p00.x, p00.y, p10.x, p10.y, p01.x, p01.y);
@@ -1019,31 +1121,26 @@
             const w = canvas.width, h = canvas.height;
             const hasWarp = P.outTLx !== 0 || P.outTLy !== 0 || P.outTRx !== 0 || P.outTRy !== 0 ||
                             P.outBLx !== 0 || P.outBLy !== 0 || P.outBRx !== 0 || P.outBRy !== 0;
+            const hasGrid = hasGridWarp('out');
             const hasOutTransform = P.outScale !== 1 || P.outImgX !== 0 || P.outImgY !== 0 || P.outRotation !== 0;
-            if (!hasWarp && !hasOutTransform) return;
+            if (!hasWarp && !hasGrid && !hasOutTransform) return;
 
-            // Copy canvas content to offscreen, then warp back
             offCtx.clearRect(0, 0, w, h);
             offCtx.drawImage(canvas, 0, 0);
             ctx.clearRect(0, 0, w, h);
 
-            let tl = { x: w * (P.outTLx / 100),       y: h * (P.outTLy / 100) };
-            let tr = { x: w * (1 + P.outTRx / 100),   y: h * (P.outTRy / 100) };
-            let bl = { x: w * (P.outBLx / 100),       y: h * (1 + P.outBLy / 100) };
-            let br = { x: w * (1 + P.outBRx / 100),   y: h * (1 + P.outBRy / 100) };
+            let g = getGridPoints9('out', w, h);
 
-            // Apply output transform (scale, position, rotation) to corners
             if (hasOutTransform) {
                 const cx = w / 2, cy = h / 2;
                 const s = P.outScale;
                 const rad = P.outRotation * Math.PI / 180;
                 const cosR = Math.cos(rad), sinR = Math.sin(rad);
                 const tx = P.outImgX, ty = P.outImgY;
-                function xfOut(p) {
-                    let x = (p.x - cx) * s, y = (p.y - cy) * s;
-                    return { x: x * cosR - y * sinR + cx + tx, y: x * sinR + y * cosR + cy + ty };
+                for (const name of Object.keys(g)) {
+                    let x = (g[name].x - cx) * s, y = (g[name].y - cy) * s;
+                    g[name] = { x: x * cosR - y * sinR + cx + tx, y: x * sinR + y * cosR + cy + ty };
                 }
-                tl = xfOut(tl); tr = xfOut(tr); bl = xfOut(bl); br = xfOut(br);
             }
 
             const divs = 8;
@@ -1055,10 +1152,10 @@
                     const srcX0 = w * u0, srcX1 = w * u1;
                     const srcY0 = h * v0, srcY1 = h * v1;
 
-                    const p00 = bilerp(tl, tr, bl, br, u0, v0);
-                    const p10 = bilerp(tl, tr, bl, br, u1, v0);
-                    const p01 = bilerp(tl, tr, bl, br, u0, v1);
-                    const p11 = bilerp(tl, tr, bl, br, u1, v1);
+                    const p00 = gridWarpPoint(g, u0, v0);
+                    const p10 = gridWarpPoint(g, u1, v0);
+                    const p01 = gridWarpPoint(g, u0, v1);
+                    const p11 = gridWarpPoint(g, u1, v1);
 
                     drawTriangle(ctx, offCanvas,
                         srcX0, srcY0, srcX1, srcY0, srcX0, srcY1,
@@ -1073,48 +1170,45 @@
         // ─── Output grid overlay ───
         function renderOutputGrid() {
             const w = canvas.width, h = canvas.height;
+            let g = getGridPoints9('out', w, h);
 
-            // Compute warped corners
-            let tl = { x: w * (P.outTLx / 100),       y: h * (P.outTLy / 100) };
-            let tr = { x: w * (1 + P.outTRx / 100),   y: h * (P.outTRy / 100) };
-            let bl = { x: w * (P.outBLx / 100),       y: h * (1 + P.outBLy / 100) };
-            let br = { x: w * (1 + P.outBRx / 100),   y: h * (1 + P.outBRy / 100) };
-
-            // Apply output transform so grid matches actual output
             if (P.outScale !== 1 || P.outImgX !== 0 || P.outImgY !== 0 || P.outRotation !== 0) {
                 const cx = w / 2, cy = h / 2;
                 const s = P.outScale;
                 const rad = P.outRotation * Math.PI / 180;
                 const cosR = Math.cos(rad), sinR = Math.sin(rad);
                 const tx = P.outImgX, ty = P.outImgY;
-                function xfGrid(p) {
-                    let x = (p.x - cx) * s, y = (p.y - cy) * s;
-                    return { x: x * cosR - y * sinR + cx + tx, y: x * sinR + y * cosR + cy + ty };
+                for (const name of Object.keys(g)) {
+                    let x = (g[name].x - cx) * s, y = (g[name].y - cy) * s;
+                    g[name] = { x: x * cosR - y * sinR + cx + tx, y: x * sinR + y * cosR + cy + ty };
                 }
-                tl = xfGrid(tl); tr = xfGrid(tr); bl = xfGrid(bl); br = xfGrid(br);
             }
 
             const divs = 8;
             ctx.save();
             ctx.lineWidth = 1;
 
-            // Grid lines
+            // Grid lines using gridWarpPoint for accurate warped grid
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
             for (let i = 1; i < divs; i++) {
                 const t = i / divs;
-                // Horizontal line
-                const lStart = bilerp(tl, tr, bl, br, 0, t);
-                const lEnd   = bilerp(tl, tr, bl, br, 1, t);
+                // Horizontal line (multiple segments for curve accuracy)
                 ctx.beginPath();
-                ctx.moveTo(lStart.x, lStart.y);
-                ctx.lineTo(lEnd.x, lEnd.y);
+                for (let j = 0; j <= divs; j++) {
+                    const u = j / divs;
+                    const pt = gridWarpPoint(g, u, t);
+                    if (j === 0) ctx.moveTo(pt.x, pt.y);
+                    else ctx.lineTo(pt.x, pt.y);
+                }
                 ctx.stroke();
                 // Vertical line
-                const tStart = bilerp(tl, tr, bl, br, t, 0);
-                const tEnd   = bilerp(tl, tr, bl, br, t, 1);
                 ctx.beginPath();
-                ctx.moveTo(tStart.x, tStart.y);
-                ctx.lineTo(tEnd.x, tEnd.y);
+                for (let j = 0; j <= divs; j++) {
+                    const v = j / divs;
+                    const pt = gridWarpPoint(g, t, v);
+                    if (j === 0) ctx.moveTo(pt.x, pt.y);
+                    else ctx.lineTo(pt.x, pt.y);
+                }
                 ctx.stroke();
             }
 
@@ -1122,19 +1216,25 @@
             ctx.strokeStyle = 'rgba(0, 255, 100, 0.7)';
             ctx.lineWidth = 2;
             ctx.beginPath();
-            ctx.moveTo(tl.x, tl.y);
-            ctx.lineTo(tr.x, tr.y);
-            ctx.lineTo(br.x, br.y);
-            ctx.lineTo(bl.x, bl.y);
+            ctx.moveTo(g.TL.x, g.TL.y);
+            ctx.lineTo(g.TC.x, g.TC.y);
+            ctx.lineTo(g.TR.x, g.TR.y);
+            ctx.lineTo(g.RC.x, g.RC.y);
+            ctx.lineTo(g.BR.x, g.BR.y);
+            ctx.lineTo(g.BC.x, g.BC.y);
+            ctx.lineTo(g.BL.x, g.BL.y);
+            ctx.lineTo(g.LC.x, g.LC.y);
             ctx.closePath();
             ctx.stroke();
 
-            // Corner dots
+            // Corner + grid point dots
             ctx.fillStyle = 'rgba(0, 255, 100, 0.9)';
-            for (const p of [tl, tr, bl, br]) {
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
-                ctx.fill();
+            for (const p of [g.TL, g.TR, g.BL, g.BR]) {
+                ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, Math.PI * 2); ctx.fill();
+            }
+            ctx.fillStyle = 'rgba(255, 200, 50, 0.9)';
+            for (const p of [g.TC, g.BC, g.LC, g.RC, g.CC]) {
+                ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI * 2); ctx.fill();
             }
 
             ctx.restore();
