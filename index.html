@@ -371,6 +371,7 @@
             }
             html += `<div style="display:flex;gap:6px;margin:10px 0 4px 0"><button class="tweak-btn" id="play-btn" style="margin:0;flex:1">Play</button><button class="tweak-btn" id="pause-btn" style="margin:0;flex:1">Pause</button><button class="tweak-btn" id="restart-btn" style="margin:0;flex:1">Restart</button></div>`;
             html += `<button class="tweak-btn" id="flip-lyrics-btn">Flip Lyrics Horizontally</button>`;
+            html += `<button class="tweak-btn" id="grid-toggle-btn">Show Output Grid</button>`;
             html += `<button class="tweak-btn" id="set-defaults-btn">Set Current as Default</button>`;
             html += `<button class="tweak-btn" id="reset-defaults-btn" style="color:#ff8888;border-color:rgba(255,136,136,0.4);background:rgba(255,136,136,0.1)">Reset to Original Defaults</button>`;
             html += `<button class="tweak-btn" id="hide-ui-btn" style="color:#ffcc66;border-color:rgba(255,204,102,0.4);background:rgba(255,204,102,0.1)">Hide UI (Press 1)</button>`;
@@ -427,6 +428,12 @@
                 P.lyricsFlipped = lyricsFlipped;
             });
 
+            // Grid toggle button
+            document.getElementById('grid-toggle-btn').addEventListener('click', () => {
+                showOutputGrid = !showOutputGrid;
+                document.getElementById('grid-toggle-btn').textContent = showOutputGrid ? 'Hide Output Grid' : 'Show Output Grid';
+            });
+
             // Hide UI button
             document.getElementById('hide-ui-btn').addEventListener('click', () => {
                 toggleCleanMode();
@@ -473,6 +480,7 @@
 
         // ─── State ───
         let lyricsFlipped    = P.lyricsFlipped;
+        let showOutputGrid   = false;
         let faceLandmarker   = null;
         let poseLandmarker   = null;
         let lyricsData       = [];
@@ -790,6 +798,62 @@
                         p10.x, p10.y, p11.x, p11.y, p01.x, p01.y);
                 }
             }
+        }
+
+        // ─── Output grid overlay ───
+        function renderOutputGrid() {
+            const w = canvas.width, h = canvas.height;
+
+            // Compute warped corners
+            const tl = { x: w * (P.outTLx / 100),       y: h * (P.outTLy / 100) };
+            const tr = { x: w * (1 + P.outTRx / 100),   y: h * (P.outTRy / 100) };
+            const bl = { x: w * (P.outBLx / 100),       y: h * (1 + P.outBLy / 100) };
+            const br = { x: w * (1 + P.outBRx / 100),   y: h * (1 + P.outBRy / 100) };
+
+            const divs = 8;
+            ctx.save();
+            ctx.lineWidth = 1;
+
+            // Grid lines
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+            for (let i = 1; i < divs; i++) {
+                const t = i / divs;
+                // Horizontal line
+                const lStart = bilerp(tl, tr, bl, br, 0, t);
+                const lEnd   = bilerp(tl, tr, bl, br, 1, t);
+                ctx.beginPath();
+                ctx.moveTo(lStart.x, lStart.y);
+                ctx.lineTo(lEnd.x, lEnd.y);
+                ctx.stroke();
+                // Vertical line
+                const tStart = bilerp(tl, tr, bl, br, t, 0);
+                const tEnd   = bilerp(tl, tr, bl, br, t, 1);
+                ctx.beginPath();
+                ctx.moveTo(tStart.x, tStart.y);
+                ctx.lineTo(tEnd.x, tEnd.y);
+                ctx.stroke();
+            }
+
+            // Border
+            ctx.strokeStyle = 'rgba(0, 255, 100, 0.7)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(tl.x, tl.y);
+            ctx.lineTo(tr.x, tr.y);
+            ctx.lineTo(br.x, br.y);
+            ctx.lineTo(bl.x, bl.y);
+            ctx.closePath();
+            ctx.stroke();
+
+            // Corner dots
+            ctx.fillStyle = 'rgba(0, 255, 100, 0.9)';
+            for (const p of [tl, tr, bl, br]) {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            ctx.restore();
         }
 
         // ─── Detect face ───
@@ -1269,6 +1333,7 @@
             }
 
             applyOutputWarp();
+            if (showOutputGrid) renderOutputGrid();
 
             requestAnimationFrame(animate);
         }
