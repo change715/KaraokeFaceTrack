@@ -295,7 +295,7 @@
         const P_HARDCODED = {
             charSize:80, charLifetime:4, noiseAmp:7, noiseFreq:2.5,
             mouthSmooth:0.8, fadeInStart:0, fadeInEnd:0.12,
-            cpPull1:-0.5, cpPull2:0.19, cpCurve:0.48,
+            cp1Along:-0.5, cp1Perp:0.48, cp2Along:0.19, cp2Perp:0.24,
             targetX:0, targetY:0.2,
             colorStartR:255, colorStartG:255, colorStartB:255,
             colorEndR:220, colorEndG:50, colorEndB:50,
@@ -348,9 +348,10 @@
                 { key: 'burstDuration', label: 'Burst time %',    min: 0.02, max: 0.6, step: 0.01 },
                 { accordionEnd: true },
                 { accordion: 'Spline Shape' },
-                { key: 'cpPull1',      label: 'CP1 pull',      min: -1.5, max: 2.0, step: 0.01 },
-                { key: 'cpPull2',      label: 'CP2 pull',      min: -1.5, max: 2.0, step: 0.01 },
-                { key: 'cpCurve',      label: 'Curvature',     min: -0.5, max: 0.5, step: 0.01 },
+                { key: 'cp1Along',     label: 'CP1 along',     min: -1.5, max: 2.0, step: 0.01 },
+                { key: 'cp1Perp',      label: 'CP1 perp',      min: -1.0, max: 1.0, step: 0.01 },
+                { key: 'cp2Along',     label: 'CP2 along',     min: -1.5, max: 2.0, step: 0.01 },
+                { key: 'cp2Perp',      label: 'CP2 perp',      min: -1.0, max: 1.0, step: 0.01 },
                 { key: 'targetX',      label: 'Target X %',    min: 0, max: 0.4, step: 0.01 },
                 { key: 'targetY',      label: 'Target Y %',    min: 0, max: 0.4, step: 0.01 },
                 { key: 'targetNoise',  label: 'End noise',     min: 0, max: 60, step: 1 },
@@ -1298,16 +1299,15 @@
             // Vector from start to target
             const dx = tx - p.startX;
             const dy = ty - p.startY;
-            // Perpendicular direction (for curvature)
+            // Perpendicular direction
             const len = Math.sqrt(dx*dx + dy*dy) || 1;
             const perpX = -dy / len;
             const perpY =  dx / len;
-            // Control points along the start→target vector with lateral offset
-            const curveOffset = len * P.cpCurve;
-            const cp1x = p.startX + dx * P.cpPull1 + perpX * curveOffset;
-            const cp1y = p.startY + dy * P.cpPull1 + perpY * curveOffset;
-            const cp2x = p.startX + dx * P.cpPull2 + perpX * curveOffset * 0.5;
-            const cp2y = p.startY + dy * P.cpPull2 + perpY * curveOffset * 0.5;
+            // Control points: along = distance along start→target, perp = perpendicular offset
+            const cp1x = p.startX + dx * P.cp1Along + perpX * len * P.cp1Perp;
+            const cp1y = p.startY + dy * P.cp1Along + perpY * len * P.cp1Perp;
+            const cp2x = p.startX + dx * P.cp2Along + perpX * len * P.cp2Perp;
+            const cp2y = p.startY + dy * P.cp2Along + perpY * len * P.cp2Perp;
 
             const x = cubicBezier(t, p.startX, cp1x, cp2x, tx);
             const y = cubicBezier(t, p.startY, cp1y, cp2y, ty);
@@ -1539,11 +1539,10 @@
                     const dx = tx - fakeP.startX, dy = ty - fakeP.startY;
                     const len = Math.sqrt(dx*dx + dy*dy) || 1;
                     const perpX = -dy / len, perpY = dx / len;
-                    const curveOffset = len * P.cpCurve;
-                    const cp1x = fakeP.startX + dx * P.cpPull1 + perpX * curveOffset;
-                    const cp1y = fakeP.startY + dy * P.cpPull1 + perpY * curveOffset;
-                    const cp2x = fakeP.startX + dx * P.cpPull2 + perpX * curveOffset * 0.5;
-                    const cp2y = fakeP.startY + dy * P.cpPull2 + perpY * curveOffset * 0.5;
+                    const cp1x = fakeP.startX + dx * P.cp1Along + perpX * len * P.cp1Perp;
+                    const cp1y = fakeP.startY + dy * P.cp1Along + perpY * len * P.cp1Perp;
+                    const cp2x = fakeP.startX + dx * P.cp2Along + perpX * len * P.cp2Perp;
+                    const cp2y = fakeP.startY + dy * P.cp2Along + perpY * len * P.cp2Perp;
                     // CP1
                     ctx.fillStyle = 'rgba(255,100,100,0.8)';
                     ctx.beginPath(); ctx.arc(cp1x, cp1y, 5, 0, Math.PI * 2); ctx.fill();
