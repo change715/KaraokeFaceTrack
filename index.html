@@ -478,6 +478,9 @@
         }
 
         // ─── Detect face ───
+        const FACE_LOST_GRACE = 500; // ms to keep last position after losing tracking
+        let lastFaceSeenTs = 0;
+
         function detectFace(timestamp) {
             if (!faceLandmarker) return;
             const ts = Math.round(timestamp);
@@ -487,14 +490,33 @@
                 const results = faceLandmarker.detectForVideo(video, ts);
                 if (results.faceLandmarks && results.faceLandmarks.length > 0) {
                     const lm = results.faceLandmarks[0];
-                    const upper = lm[13], lower = lm[14];
-                    const normX = 1.0 - (upper.x + lower.x) / 2;
-                    const normY = (upper.y + lower.y) / 2;
+
+                    // Primary: mouth (landmarks 13 & 14)
+                    // Fallback: nose tip (landmark 1) offset down toward mouth
+                    const upper = lm[13], lower = lm[14], nose = lm[1];
+                    const chin = lm[152];
+                    let trackX, trackY;
+
+                    if (upper && lower && upper.x > 0 && lower.x > 0) {
+                        // Mouth landmarks available
+                        trackX = (upper.x + lower.x) / 2;
+                        trackY = (upper.y + lower.y) / 2;
+                    } else if (nose) {
+                        // Fallback: estimate mouth from nose + chin midpoint
+                        const mouthEstY = chin ? (nose.y + chin.y) / 2 : nose.y + 0.04;
+                        trackX = nose.x;
+                        trackY = mouthEstY;
+                    } else {
+                        return; // no usable landmarks
+                    }
+
+                    const normX = 1.0 - trackX;
+                    const normY = trackY;
                     const rawX = normX * canvas.width;
                     const rawY = normY * canvas.height;
 
                     // Face yaw: nose position relative to face edges
-                    const rightEdge = lm[234], leftEdge = lm[454], nose = lm[1];
+                    const rightEdge = lm[234], leftEdge = lm[454];
                     const faceCX = (rightEdge.x + leftEdge.x) / 2;
                     const faceW = Math.abs(rightEdge.x - leftEdge.x);
                     const rawYaw = faceW > 0.001
@@ -503,7 +525,7 @@
                     const clampedYaw = Math.max(-1, Math.min(1, rawYaw));
 
                     // Face pitch: nose tip vs face vertical center (forehead lm 10, chin lm 152)
-                    const forehead = lm[10], chin = lm[152];
+                    const forehead = lm[10];
                     const faceCY = (forehead.y + chin.y) / 2;
                     const faceH = Math.abs(chin.y - forehead.y);
                     const rawPitch = faceH > 0.001
@@ -527,7 +549,13 @@
                     faceYaw = smoothYaw;
                     facePitch = smoothPitch;
                     hasFace = true;
-                } else { hasFace = false; }
+                    lastFaceSeenTs = timestamp;
+                } else {
+                    // Grace period: keep last position briefly before giving up
+                    if (hasFace && (timestamp - lastFaceSeenTs) > FACE_LOST_GRACE) {
+                        hasFace = false;
+                    }
+                }
             } catch (e) { console.warn('Face detect error:', e); }
         }
 
