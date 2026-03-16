@@ -33,5 +33,7 @@
     "ksBLx": 0,
     "ksBLy": 0,
     "ksBRx": 0,
-    "ksBRy": 0
+    "ksBRy": 0,
+    "lyricsFlipped": true,
+    "cameraDeviceId": ""
 }

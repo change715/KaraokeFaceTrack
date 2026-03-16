@@ -245,6 +245,8 @@
             subX:0, subY:40, subScale:1,
             ksTLx:0, ksTLy:0, ksTRx:0, ksTRy:0,
             ksBLx:0, ksBLy:0, ksBRx:0, ksBRy:0,
+            lyricsFlipped: true,
+            cameraDeviceId: '',
         };
 
         // Load defaults from params.json (persists across server restarts)
@@ -365,6 +367,7 @@
             // Flip lyrics button
             document.getElementById('flip-lyrics-btn').addEventListener('click', () => {
                 lyricsFlipped = !lyricsFlipped;
+                P.lyricsFlipped = lyricsFlipped;
                 applySubtitleTransform();
             });
 
@@ -374,6 +377,8 @@
                 for (const d of defs) {
                     if (d.key) saved[d.key] = P[d.key];
                 }
+                saved.lyricsFlipped = lyricsFlipped;
+                saved.cameraDeviceId = currentDeviceId;
                 // Download as params.json for user to replace in project folder
                 const blob = new Blob([JSON.stringify(saved, null, 4) + '\n'], { type: 'application/json' });
                 const a = document.createElement('a');
@@ -406,7 +411,7 @@
         });
 
         // ─── State ───
-        let lyricsFlipped    = false;
+        let lyricsFlipped    = P.lyricsFlipped;
         let faceLandmarker   = null;
         let poseLandmarker   = null;
         let lyricsData       = [];
@@ -1095,7 +1100,7 @@
                 console.error(e);
             }
             try {
-                await startCamera();
+                await startCamera(P.cameraDeviceId || undefined);
                 await populateCameraSelect();
             } catch (e) { log('Camera error: ' + e.message); console.error(e); }
             startBtn.disabled = false;
