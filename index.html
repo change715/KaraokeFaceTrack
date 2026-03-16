@@ -238,67 +238,6 @@
         }
         .calib-label.output-mode { color: #88aaff; }
         .calib-label.active { color: #ff0; }
-        .spline-wp {
-            position: absolute;
-            width: 20px; height: 20px;
-            border: 2px solid #f80;
-            border-radius: 50%;
-            background: rgba(255,136,0,0.3);
-            cursor: grab;
-            z-index: 180;
-            transform: translate(-50%, -50%);
-            pointer-events: auto;
-        }
-        .spline-wp.tracking { border-color: #0cf; background: rgba(0,204,255,0.3); }
-        .spline-wp:hover { background: rgba(255,136,0,0.55); }
-        .spline-wp.tracking:hover { background: rgba(0,204,255,0.55); }
-        .spline-wp-label {
-            position: absolute;
-            color: #f80;
-            font-size: 0.6rem;
-            font-family: monospace;
-            pointer-events: none;
-            z-index: 181;
-            text-shadow: 0 0 3px #000, 0 0 6px #000;
-            transform: translate(-50%, -16px);
-            white-space: nowrap;
-        }
-        .spline-wp-label.tracking { color: #0cf; }
-        #spline-edit-overlay {
-            position: absolute;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            z-index: 175;
-            pointer-events: none;
-            display: none;
-        }
-        #spline-edit-overlay.active { display: block; }
-        .spline-wp-controls {
-            display: flex;
-            gap: 4px;
-            margin: 4px 0;
-            align-items: center;
-            font-size: 0.72rem;
-        }
-        .spline-wp-controls button {
-            background: rgba(255,255,255,0.1);
-            border: 1px solid rgba(255,255,255,0.25);
-            color: #fff;
-            border-radius: 4px;
-            padding: 2px 8px;
-            cursor: pointer;
-            font-size: 0.7rem;
-            font-family: sans-serif;
-        }
-        .spline-wp-controls button:hover { background: rgba(255,255,255,0.2); }
-        .spline-wp-controls .wp-mode {
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 0.65rem;
-            cursor: pointer;
-        }
-        .spline-wp-controls .wp-mode.fixed { background: rgba(255,136,0,0.2); border: 1px solid rgba(255,136,0,0.5); color: #f80; }
-        .spline-wp-controls .wp-mode.tracking { background: rgba(0,204,255,0.2); border: 1px solid rgba(0,204,255,0.5); color: #0cf; }
         #calib-overlay {
             position: absolute;
             top: 0; left: 0;
@@ -317,7 +256,6 @@
         <canvas id="overlay"></canvas>
         <div id="subtitle-box"></div>
         <div id="calib-overlay"></div>
-        <div id="spline-edit-overlay"></div>
         <div id="status">Loading...</div>
         <button id="tweaks-toggle">Parameters</button>
         <div id="tweaks-panel"></div>
@@ -386,10 +324,6 @@
                 const res = await fetch('params.json?' + Date.now());
                 if (res.ok) {
                     const saved = await res.json();
-                    if (Array.isArray(saved.splineWaypoints)) {
-                        splineWaypoints = saved.splineWaypoints;
-                        delete saved.splineWaypoints;
-                    }
                     Object.assign(P_DEFAULTS, saved);
                     Object.assign(P, P_DEFAULTS);
                 }
@@ -421,7 +355,6 @@
                 { key: 'targetY',      label: 'Target Y %',    min: 0, max: 0.4, step: 0.01 },
                 { key: 'targetNoise',  label: 'End noise',     min: 0, max: 60, step: 1 },
                 { button: 'spline-viz-btn', label: 'Show Spline Path' },
-                { button: 'spline-edit-btn', label: 'Edit Spline Path' },
                 { accordionEnd: true },
                 { accordion: 'Tracking' },
                 { key: 'mouthSmooth',  label: 'Smoothing',     min: 0, max: 0.95, step: 0.01 },
@@ -579,21 +512,6 @@
                 document.getElementById('spline-viz-btn').textContent = showSplineViz ? 'Hide Spline Path' : 'Show Spline Path';
             });
 
-            // Spline edit mode
-            document.getElementById('spline-edit-btn').addEventListener('click', () => {
-                splineEditMode = !splineEditMode;
-                document.getElementById('spline-edit-btn').textContent = splineEditMode ? 'Exit Spline Edit' : 'Edit Spline Path';
-                const overlay = document.getElementById('spline-edit-overlay');
-                overlay.classList.toggle('active', splineEditMode);
-                if (splineEditMode) {
-                    showSplineViz = true;
-                    document.getElementById('spline-viz-btn').textContent = 'Hide Spline Path';
-                    rebuildSplineEditUI();
-                } else {
-                    overlay.innerHTML = '';
-                }
-            });
-
             // Grid toggle button
             document.getElementById('grid-toggle-btn').addEventListener('click', () => {
                 showOutputGrid = !showOutputGrid;
@@ -641,7 +559,6 @@
                 saved.lyricsFlipped = lyricsFlipped;
                 saved.cameraMirrored = cameraMirrored;
                 saved.cameraDeviceId = currentDeviceId;
-                saved.splineWaypoints = splineWaypoints;
                 // Download as params.json for user to replace in project folder
                 const blob = new Blob([JSON.stringify(saved, null, 4) + '\n'], { type: 'application/json' });
                 const a = document.createElement('a');
@@ -669,8 +586,6 @@
                 cameraMirrored = P.cameraMirrored;
                 if (document.getElementById('mirror-cam-btn'))
                     document.getElementById('mirror-cam-btn').textContent = cameraMirrored ? 'Unmirror Camera' : 'Mirror Camera';
-                splineWaypoints = [];
-                if (splineEditMode) rebuildSplineEditUI();
             });
         }
 
@@ -683,12 +598,6 @@
         let cameraMirrored   = P.cameraMirrored;
         let showOutputGrid   = false;
         let showSplineViz    = false;
-        let splineEditMode   = false;
-        // Waypoints between start (mouth) and target. Each: { x, y, mode }
-        // x,y are fractions of canvas (0-1). mode: 'fixed' or 'tracking'
-        // 'fixed' = absolute screen position, 'tracking' = offset from mouth position
-        let splineWaypoints  = [];
-        let splineDragging   = -1; // index into splineWaypoints, or -1
         let calibMode        = false;
         let calibTarget      = null; // 'camera' or 'output'
         let calibSelectedCorner = 'TL';
@@ -817,138 +726,6 @@
                 calibSelectedCorner = e.target.value;
                 updateCalibCorners();
             }
-        });
-
-        // ─── Spline waypoint editing ───
-        function getWaypointScreenPos(wp) {
-            const W = dispCanvas.clientWidth, H = dispCanvas.clientHeight;
-            if (wp.mode === 'tracking') {
-                return { x: mouthX + wp.x * W, y: mouthY + wp.y * H };
-            }
-            return { x: wp.x * W, y: wp.y * H };
-        }
-
-        function rebuildSplineEditUI() {
-            const overlay = document.getElementById('spline-edit-overlay');
-            if (!splineEditMode) { overlay.innerHTML = ''; return; }
-            overlay.innerHTML = '';
-
-            // Add waypoint button area (click on the overlay path area)
-            const addBtn = document.createElement('button');
-            addBtn.className = 'tweak-btn';
-            addBtn.style.cssText = 'position:absolute;bottom:12px;left:50%;transform:translateX(-50%);z-index:185;pointer-events:auto;padding:4px 16px;font-size:0.72rem';
-            addBtn.textContent = 'Add Waypoint';
-            addBtn.addEventListener('click', () => {
-                // Add at midpoint between last waypoint (or mouth) and target
-                const W = dispCanvas.clientWidth, H = dispCanvas.clientHeight;
-                const lastX = splineWaypoints.length > 0 ? splineWaypoints[splineWaypoints.length - 1].x : (mouthX / W);
-                const lastY = splineWaypoints.length > 0 ? splineWaypoints[splineWaypoints.length - 1].y : (mouthY / H);
-                const midX = (lastX + P.targetX) / 2;
-                const midY = (lastY + P.targetY) / 2;
-                splineWaypoints.push({ x: midX, y: midY, mode: 'fixed' });
-                rebuildSplineEditUI();
-            });
-            overlay.appendChild(addBtn);
-
-            // Waypoint list panel
-            const listDiv = document.createElement('div');
-            listDiv.style.cssText = 'position:absolute;bottom:48px;left:50%;transform:translateX(-50%);z-index:185;pointer-events:auto;background:rgba(15,15,20,0.9);border:1px solid rgba(255,255,255,0.2);border-radius:8px;padding:8px 12px;min-width:220px;font-size:0.72rem;font-family:sans-serif;max-height:40vh;overflow-y:auto';
-            if (splineWaypoints.length === 0) {
-                listDiv.innerHTML = '<div style="opacity:0.5;text-align:center;padding:4px 0">No waypoints yet</div>';
-            } else {
-                for (let i = 0; i < splineWaypoints.length; i++) {
-                    const wp = splineWaypoints[i];
-                    const row = document.createElement('div');
-                    row.className = 'spline-wp-controls';
-                    row.innerHTML = `<span style="flex:0 0 20px;opacity:0.5">${i + 1}</span>` +
-                        `<button class="wp-mode ${wp.mode}" data-idx="${i}">${wp.mode === 'fixed' ? 'Fixed' : 'Tracking'}</button>` +
-                        `<span style="flex:1;opacity:0.4;font-size:0.6rem">(${wp.x.toFixed(2)}, ${wp.y.toFixed(2)})</span>` +
-                        `<button data-remove="${i}" style="color:#ff6666">×</button>`;
-                    listDiv.appendChild(row);
-                }
-            }
-            overlay.appendChild(listDiv);
-
-            // Wire up mode toggle and remove buttons
-            listDiv.querySelectorAll('.wp-mode').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const idx = parseInt(btn.dataset.idx);
-                    const wp = splineWaypoints[idx];
-                    const W = dispCanvas.clientWidth, H = dispCanvas.clientHeight;
-                    if (wp.mode === 'fixed') {
-                        // Convert absolute → tracking offset from mouth
-                        wp.x = wp.x - mouthX / W;
-                        wp.y = wp.y - mouthY / H;
-                        wp.mode = 'tracking';
-                    } else {
-                        // Convert tracking offset → absolute
-                        wp.x = mouthX / W + wp.x;
-                        wp.y = mouthY / H + wp.y;
-                        wp.mode = 'fixed';
-                    }
-                    rebuildSplineEditUI();
-                });
-            });
-            listDiv.querySelectorAll('[data-remove]').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    splineWaypoints.splice(parseInt(btn.dataset.remove), 1);
-                    rebuildSplineEditUI();
-                });
-            });
-
-            // Render draggable handles
-            updateSplineHandles();
-        }
-
-        function updateSplineHandles() {
-            const overlay = document.getElementById('spline-edit-overlay');
-            if (!splineEditMode) return;
-            // Remove old handles/labels only
-            overlay.querySelectorAll('.spline-wp, .spline-wp-label').forEach(el => el.remove());
-            for (let i = 0; i < splineWaypoints.length; i++) {
-                const wp = splineWaypoints[i];
-                const pos = getWaypointScreenPos(wp);
-                const handle = document.createElement('div');
-                handle.className = 'spline-wp' + (wp.mode === 'tracking' ? ' tracking' : '');
-                handle.style.left = pos.x + 'px';
-                handle.style.top = pos.y + 'px';
-                handle.dataset.idx = i;
-                const label = document.createElement('div');
-                label.className = 'spline-wp-label' + (wp.mode === 'tracking' ? ' tracking' : '');
-                label.style.left = pos.x + 'px';
-                label.style.top = pos.y + 'px';
-                label.textContent = `${i + 1} (${wp.mode})`;
-                overlay.appendChild(handle);
-                overlay.appendChild(label);
-
-                handle.addEventListener('mousedown', (e) => {
-                    e.preventDefault();
-                    splineDragging = i;
-                });
-            }
-        }
-
-        // Spline waypoint drag
-        document.addEventListener('mousemove', (e) => {
-            if (splineDragging < 0) return;
-            const rect = dispCanvas.getBoundingClientRect();
-            const sx = e.clientX - rect.left;
-            const sy = e.clientY - rect.top;
-            const W = dispCanvas.clientWidth, H = dispCanvas.clientHeight;
-            const wp = splineWaypoints[splineDragging];
-            if (wp.mode === 'tracking') {
-                wp.x = (sx - mouthX) / W;
-                wp.y = (sy - mouthY) / H;
-            } else {
-                wp.x = sx / W;
-                wp.y = sy / H;
-            }
-            updateSplineHandles();
-            // Update coords in the list
-            rebuildSplineEditUI();
-        });
-        document.addEventListener('mouseup', () => {
-            if (splineDragging >= 0) splineDragging = -1;
         });
 
         function log(msg) {
@@ -1509,46 +1286,8 @@
             return u3*p0 + 3*u2*t*p1 + 3*u*t2*p2 + t3*p3;
         }
 
-        // ─── Catmull-Rom interpolation ───
-        // Given points array [{x,y}], returns position at t (0-1)
-        function catmullRom(points, t) {
-            const n = points.length;
-            if (n === 0) return { x: 0, y: 0 };
-            if (n === 1) return { ...points[0] };
-            if (n === 2) return { x: lerp(points[0].x, points[1].x, t), y: lerp(points[0].y, points[1].y, t) };
-
-            // Map t to segment
-            const segments = n - 1;
-            const scaled = t * segments;
-            const seg = Math.min(Math.floor(scaled), segments - 1);
-            const lt = scaled - seg;
-
-            // Get 4 points for Catmull-Rom (clamp at boundaries)
-            const p0 = points[Math.max(0, seg - 1)];
-            const p1 = points[seg];
-            const p2 = points[Math.min(n - 1, seg + 1)];
-            const p3 = points[Math.min(n - 1, seg + 2)];
-
-            const lt2 = lt * lt, lt3 = lt2 * lt;
-            return {
-                x: 0.5 * ((2*p1.x) + (-p0.x + p2.x)*lt + (2*p0.x - 5*p1.x + 4*p2.x - p3.x)*lt2 + (-p0.x + 3*p1.x - 3*p2.x + p3.x)*lt3),
-                y: 0.5 * ((2*p1.y) + (-p0.y + p2.y)*lt + (2*p0.y - 5*p1.y + 4*p2.y - p3.y)*lt2 + (-p0.y + 3*p1.y - 3*p2.y + p3.y)*lt3),
-            };
-        }
-
-        // ─── Resolve waypoint positions for a given particle ───
-        function resolveWaypoints(p) {
-            const W = canvas.width, H = canvas.height;
-            return splineWaypoints.map(wp => {
-                if (wp.mode === 'tracking') {
-                    return { x: p.startX + wp.x * W, y: p.startY + wp.y * H };
-                }
-                return { x: wp.x * W, y: wp.y * H };
-            });
-        }
-
         // ─── Get particle position ───
-        // Each particle has its own spline: from its birth mouth pos → [waypoints] → fixed target
+        // Each particle has its own spline: from its birth mouth pos → fixed upper-left target
         function getParticlePos(p, t) {
             const W = canvas.width, H = canvas.height;
             // Target: upper-left area of the screen with per-particle vertical noise
@@ -1556,23 +1295,14 @@
             const tyBase = H * P.targetY;
             const targetOffset = (Math.sin(p.seed * 7.13) * 0.5 + Math.sin(p.seed * 3.71) * 0.3 + Math.sin(p.seed * 11.3) * 0.2) * P.targetNoise;
             const ty = tyBase + targetOffset;
-
-            // If waypoints exist, use Catmull-Rom through: start → waypoints → target
-            if (splineWaypoints.length > 0) {
-                const pts = [
-                    { x: p.startX, y: p.startY },
-                    ...resolveWaypoints(p),
-                    { x: tx, y: ty },
-                ];
-                return catmullRom(pts, t);
-            }
-
-            // Original cubic bezier path (no waypoints)
+            // Vector from start to target
             const dx = tx - p.startX;
             const dy = ty - p.startY;
+            // Perpendicular direction (for curvature)
             const len = Math.sqrt(dx*dx + dy*dy) || 1;
             const perpX = -dy / len;
             const perpY =  dx / len;
+            // Control points along the start→target vector with lateral offset
             const curveOffset = len * P.cpCurve;
             const cp1x = p.startX + dx * P.cpPull1 + perpX * curveOffset;
             const cp1y = p.startY + dy * P.cpPull1 + perpY * curveOffset;
@@ -1800,54 +1530,39 @@
                 ctx.lineWidth = 1.5;
                 ctx.stroke();
 
-                // Draw key points for the first spline
+                // Draw control points for the first spline
                 if (si === 0) {
                     const tx = W * P.targetX;
                     const tyBase = H * P.targetY;
                     const targetOffset = (Math.sin(seed * 7.13) * 0.5 + Math.sin(seed * 3.71) * 0.3 + Math.sin(seed * 11.3) * 0.2) * P.targetNoise;
                     const ty = tyBase + targetOffset;
-
-                    if (splineWaypoints.length > 0) {
-                        // Draw waypoint markers on the canvas
-                        const resolved = resolveWaypoints(fakeP);
-                        for (let wi = 0; wi < resolved.length; wi++) {
-                            const wp = resolved[wi];
-                            const isTracking = splineWaypoints[wi].mode === 'tracking';
-                            ctx.fillStyle = isTracking ? 'rgba(0,204,255,0.8)' : 'rgba(255,136,0,0.8)';
-                            ctx.beginPath(); ctx.arc(wp.x, wp.y, 6, 0, Math.PI * 2); ctx.fill();
-                            ctx.fillStyle = '#fff';
-                            ctx.font = 'bold 9px monospace';
-                            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-                            ctx.fillText(wi + 1, wp.x, wp.y);
-                        }
-                        ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
-                    } else {
-                        // Original bezier control points
-                        const dx = tx - fakeP.startX, dy = ty - fakeP.startY;
-                        const len = Math.sqrt(dx*dx + dy*dy) || 1;
-                        const perpX = -dy / len, perpY = dx / len;
-                        const curveOffset = len * P.cpCurve;
-                        const cp1x = fakeP.startX + dx * P.cpPull1 + perpX * curveOffset;
-                        const cp1y = fakeP.startY + dy * P.cpPull1 + perpY * curveOffset;
-                        const cp2x = fakeP.startX + dx * P.cpPull2 + perpX * curveOffset * 0.5;
-                        const cp2y = fakeP.startY + dy * P.cpPull2 + perpY * curveOffset * 0.5;
-                        ctx.fillStyle = 'rgba(255,100,100,0.8)';
-                        ctx.beginPath(); ctx.arc(cp1x, cp1y, 5, 0, Math.PI * 2); ctx.fill();
-                        ctx.fillStyle = 'rgba(100,100,255,0.8)';
-                        ctx.beginPath(); ctx.arc(cp2x, cp2y, 5, 0, Math.PI * 2); ctx.fill();
-                        ctx.setLineDash([4, 4]);
-                        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-                        ctx.lineWidth = 1;
-                        ctx.beginPath(); ctx.moveTo(fakeP.startX, fakeP.startY); ctx.lineTo(cp1x, cp1y); ctx.stroke();
-                        ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(cp2x, cp2y); ctx.stroke();
-                        ctx.setLineDash([]);
-                    }
+                    const dx = tx - fakeP.startX, dy = ty - fakeP.startY;
+                    const len = Math.sqrt(dx*dx + dy*dy) || 1;
+                    const perpX = -dy / len, perpY = dx / len;
+                    const curveOffset = len * P.cpCurve;
+                    const cp1x = fakeP.startX + dx * P.cpPull1 + perpX * curveOffset;
+                    const cp1y = fakeP.startY + dy * P.cpPull1 + perpY * curveOffset;
+                    const cp2x = fakeP.startX + dx * P.cpPull2 + perpX * curveOffset * 0.5;
+                    const cp2y = fakeP.startY + dy * P.cpPull2 + perpY * curveOffset * 0.5;
+                    // CP1
+                    ctx.fillStyle = 'rgba(255,100,100,0.8)';
+                    ctx.beginPath(); ctx.arc(cp1x, cp1y, 5, 0, Math.PI * 2); ctx.fill();
+                    // CP2
+                    ctx.fillStyle = 'rgba(100,100,255,0.8)';
+                    ctx.beginPath(); ctx.arc(cp2x, cp2y, 5, 0, Math.PI * 2); ctx.fill();
                     // Target
                     ctx.fillStyle = 'rgba(100,255,100,0.8)';
                     ctx.beginPath(); ctx.arc(tx, ty, 5, 0, Math.PI * 2); ctx.fill();
                     // Start
                     ctx.fillStyle = 'rgba(255,255,100,0.8)';
                     ctx.beginPath(); ctx.arc(fakeP.startX, fakeP.startY, 5, 0, Math.PI * 2); ctx.fill();
+                    // Tangent lines to control points
+                    ctx.setLineDash([4, 4]);
+                    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath(); ctx.moveTo(fakeP.startX, fakeP.startY); ctx.lineTo(cp1x, cp1y); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(cp2x, cp2y); ctx.stroke();
+                    ctx.setLineDash([]);
                 }
             }
             ctx.restore();
@@ -1966,7 +1681,6 @@
             applyOutputWarp();
             if (showOutputGrid) renderOutputGrid();
             if (calibMode && !calibDragging) updateCalibCorners();
-            if (splineEditMode && splineDragging < 0) updateSplineHandles();
 
             requestAnimationFrame(animate);
         }
