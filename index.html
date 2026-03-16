@@ -820,12 +820,19 @@
         });
 
         // ─── Spline waypoint editing ───
+        // All waypoint x,y are stored as fractions of canvas (render) resolution.
+        // For DOM positioning, we scale by the ratio dispCanvas.clientWidth / canvas.width.
         function getWaypointScreenPos(wp) {
-            const W = dispCanvas.clientWidth, H = dispCanvas.clientHeight;
+            const scaleX = dispCanvas.clientWidth / (canvas.width || 1);
+            const scaleY = dispCanvas.clientHeight / (canvas.height || 1);
             if (wp.mode === 'tracking') {
-                return { x: mouthX + wp.x * W, y: mouthY + wp.y * H };
+                // offset from mouth in canvas-fraction space → screen pixels
+                return {
+                    x: (mouthX + wp.x * canvas.width) * scaleX,
+                    y: (mouthY + wp.y * canvas.height) * scaleY,
+                };
             }
-            return { x: wp.x * W, y: wp.y * H };
+            return { x: wp.x * dispCanvas.clientWidth, y: wp.y * dispCanvas.clientHeight };
         }
 
         function rebuildSplineEditUI() {
@@ -840,9 +847,9 @@
             addBtn.textContent = 'Add Waypoint';
             addBtn.addEventListener('click', () => {
                 // Add at midpoint between last waypoint (or mouth) and target
-                const W = dispCanvas.clientWidth, H = dispCanvas.clientHeight;
-                const lastX = splineWaypoints.length > 0 ? splineWaypoints[splineWaypoints.length - 1].x : (mouthX / W);
-                const lastY = splineWaypoints.length > 0 ? splineWaypoints[splineWaypoints.length - 1].y : (mouthY / H);
+                const CW = canvas.width || 1, CH = canvas.height || 1;
+                const lastX = splineWaypoints.length > 0 ? splineWaypoints[splineWaypoints.length - 1].x : (mouthX / CW);
+                const lastY = splineWaypoints.length > 0 ? splineWaypoints[splineWaypoints.length - 1].y : (mouthY / CH);
                 const midX = (lastX + P.targetX) / 2;
                 const midY = (lastY + P.targetY) / 2;
                 splineWaypoints.push({ x: midX, y: midY, mode: 'fixed' });
@@ -874,16 +881,16 @@
                 btn.addEventListener('click', () => {
                     const idx = parseInt(btn.dataset.idx);
                     const wp = splineWaypoints[idx];
-                    const W = dispCanvas.clientWidth, H = dispCanvas.clientHeight;
+                    const CW = canvas.width || 1, CH = canvas.height || 1;
                     if (wp.mode === 'fixed') {
-                        // Convert absolute → tracking offset from mouth
-                        wp.x = wp.x - mouthX / W;
-                        wp.y = wp.y - mouthY / H;
+                        // Convert absolute fraction → tracking offset from mouth (in canvas fractions)
+                        wp.x = wp.x - mouthX / CW;
+                        wp.y = wp.y - mouthY / CH;
                         wp.mode = 'tracking';
                     } else {
-                        // Convert tracking offset → absolute
-                        wp.x = mouthX / W + wp.x;
-                        wp.y = mouthY / H + wp.y;
+                        // Convert tracking offset → absolute fraction
+                        wp.x = mouthX / CW + wp.x;
+                        wp.y = mouthY / CH + wp.y;
                         wp.mode = 'fixed';
                     }
                     rebuildSplineEditUI();
@@ -934,14 +941,19 @@
             const rect = dispCanvas.getBoundingClientRect();
             const sx = e.clientX - rect.left;
             const sy = e.clientY - rect.top;
-            const W = dispCanvas.clientWidth, H = dispCanvas.clientHeight;
+            const CW = canvas.width || 1, CH = canvas.height || 1;
+            const scaleX = dispCanvas.clientWidth / CW;
+            const scaleY = dispCanvas.clientHeight / CH;
             const wp = splineWaypoints[splineDragging];
             if (wp.mode === 'tracking') {
-                wp.x = (sx - mouthX) / W;
-                wp.y = (sy - mouthY) / H;
+                // Convert screen drag position to canvas-fraction offset from mouth
+                const canvasX = sx / scaleX;
+                const canvasY = sy / scaleY;
+                wp.x = (canvasX - mouthX) / CW;
+                wp.y = (canvasY - mouthY) / CH;
             } else {
-                wp.x = sx / W;
-                wp.y = sy / H;
+                wp.x = sx / dispCanvas.clientWidth;
+                wp.y = sy / dispCanvas.clientHeight;
             }
             updateSplineHandles();
             // Update coords in the list
