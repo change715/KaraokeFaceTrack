@@ -291,7 +291,7 @@
                 html += `<div class="tweak-row">
                     <label>${d.label}</label>
                     <input type="range" data-key="${d.key}" min="${d.min}" max="${d.max}" step="${d.step}" value="${P[d.key]}">
-                    <input type="number" data-key="${d.key}" id="val-${d.key}" min="${d.min}" max="${d.max}" step="${d.step}" value="${displayVal}">
+                    <input type="number" data-key="${d.key}" id="val-${d.key}" step="${d.step}" value="${displayVal}">
                 </div>`;
             }
             html += `<button class="tweak-btn" id="flip-lyrics-btn">Flip Lyrics Horizontally</button>`;
