@@ -1185,9 +1185,9 @@
             ctx.font = `${fontSize}px sans-serif`;
             ctx.textBaseline = 'middle';
 
-            const maxW = P.subMaxWidth * P.subScale;
-            const lineH = fontSize * 1.5;
             const padX = 28, padY = 12;
+            const maxW = Math.min(P.subMaxWidth * P.subScale, w - padX * 2);
+            const lineH = fontSize * 1.5;
 
             // Word-wrap into lines, tracking character indices
             const words = text.split(' ');
@@ -1214,11 +1214,14 @@
             const boxW = Math.max(widestLine + padX * 2, 200);
             const boxH = totalTextH + padY * 2;
 
-            // Position (anchored at bottom)
+            // Position (anchored at bottom, clamped to canvas)
             const cx = w / 2 + P.subX;
             const by = h - P.subY;
-            const boxX = cx - boxW / 2;
+            let boxX = cx - boxW / 2;
             const boxY = by - boxH;
+            // Clamp horizontally to stay within canvas
+            if (boxX < 0) boxX = 0;
+            if (boxX + boxW > w) boxX = w - boxW;
 
             // Apply flip
             if (lyricsFlipped) {
