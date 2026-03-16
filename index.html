@@ -354,6 +354,7 @@
                 { key: 'targetX',      label: 'Target X %',    min: 0, max: 0.4, step: 0.01 },
                 { key: 'targetY',      label: 'Target Y %',    min: 0, max: 0.4, step: 0.01 },
                 { key: 'targetNoise',  label: 'End noise',     min: 0, max: 60, step: 1 },
+                { button: 'spline-viz-btn', label: 'Show Spline Path' },
                 { accordionEnd: true },
                 { accordion: 'Tracking' },
                 { key: 'mouthSmooth',  label: 'Smoothing',     min: 0, max: 0.95, step: 0.01 },
@@ -415,6 +416,10 @@
                 }
                 if (d.accordionEnd) {
                     html += `</div></div>`;
+                    continue;
+                }
+                if (d.button) {
+                    html += `<button class="tweak-btn" id="${d.button}" style="margin:6px 0">${d.label}</button>`;
                     continue;
                 }
                 const displayVal = Number.isInteger(P[d.key]) ? P[d.key] : P[d.key].toFixed(2);
@@ -499,6 +504,12 @@
                 cameraMirrored = !cameraMirrored;
                 P.cameraMirrored = cameraMirrored;
                 document.getElementById('mirror-cam-btn').textContent = cameraMirrored ? 'Unmirror Camera' : 'Mirror Camera';
+            });
+
+            // Spline viz toggle
+            document.getElementById('spline-viz-btn').addEventListener('click', () => {
+                showSplineViz = !showSplineViz;
+                document.getElementById('spline-viz-btn').textContent = showSplineViz ? 'Hide Spline Path' : 'Show Spline Path';
             });
 
             // Grid toggle button
@@ -586,6 +597,7 @@
         let lyricsFlipped    = P.lyricsFlipped;
         let cameraMirrored   = P.cameraMirrored;
         let showOutputGrid   = false;
+        let showSplineViz    = false;
         let calibMode        = false;
         let calibTarget      = null; // 'camera' or 'output'
         let calibSelectedCorner = 'TL';
@@ -1494,6 +1506,68 @@
             return 1 - Math.pow(1 - t, 3);
         }
 
+        // ─── Render spline visualizer ───
+        function renderSplineViz() {
+            if (!hasFace) return;
+            const W = canvas.width, H = canvas.height;
+            // Draw a few sample splines from the current mouth position with varying seeds
+            const seeds = [0, 15, 30, 50, 70, 85];
+            ctx.save();
+            for (let si = 0; si < seeds.length; si++) {
+                const seed = seeds[si];
+                const fakeP = { startX: mouthX, startY: mouthY, seed };
+                // Sample the cubic bezier path
+                const steps = 40;
+                ctx.beginPath();
+                for (let i = 0; i <= steps; i++) {
+                    const t = i / steps;
+                    const pos = getParticlePos(fakeP, t);
+                    if (i === 0) ctx.moveTo(pos.x, pos.y);
+                    else ctx.lineTo(pos.x, pos.y);
+                }
+                const hue = (si / seeds.length) * 360;
+                ctx.strokeStyle = `hsla(${hue}, 80%, 65%, 0.6)`;
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+
+                // Draw control points for the first spline
+                if (si === 0) {
+                    const tx = W * P.targetX;
+                    const tyBase = H * P.targetY;
+                    const targetOffset = (Math.sin(seed * 7.13) * 0.5 + Math.sin(seed * 3.71) * 0.3 + Math.sin(seed * 11.3) * 0.2) * P.targetNoise;
+                    const ty = tyBase + targetOffset;
+                    const dx = tx - fakeP.startX, dy = ty - fakeP.startY;
+                    const len = Math.sqrt(dx*dx + dy*dy) || 1;
+                    const perpX = -dy / len, perpY = dx / len;
+                    const curveOffset = len * P.cpCurve;
+                    const cp1x = fakeP.startX + dx * P.cpPull1 + perpX * curveOffset;
+                    const cp1y = fakeP.startY + dy * P.cpPull1 + perpY * curveOffset;
+                    const cp2x = fakeP.startX + dx * P.cpPull2 + perpX * curveOffset * 0.5;
+                    const cp2y = fakeP.startY + dy * P.cpPull2 + perpY * curveOffset * 0.5;
+                    // CP1
+                    ctx.fillStyle = 'rgba(255,100,100,0.8)';
+                    ctx.beginPath(); ctx.arc(cp1x, cp1y, 5, 0, Math.PI * 2); ctx.fill();
+                    // CP2
+                    ctx.fillStyle = 'rgba(100,100,255,0.8)';
+                    ctx.beginPath(); ctx.arc(cp2x, cp2y, 5, 0, Math.PI * 2); ctx.fill();
+                    // Target
+                    ctx.fillStyle = 'rgba(100,255,100,0.8)';
+                    ctx.beginPath(); ctx.arc(tx, ty, 5, 0, Math.PI * 2); ctx.fill();
+                    // Start
+                    ctx.fillStyle = 'rgba(255,255,100,0.8)';
+                    ctx.beginPath(); ctx.arc(fakeP.startX, fakeP.startY, 5, 0, Math.PI * 2); ctx.fill();
+                    // Tangent lines to control points
+                    ctx.setLineDash([4, 4]);
+                    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath(); ctx.moveTo(fakeP.startX, fakeP.startY); ctx.lineTo(cp1x, cp1y); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(cp2x, cp2y); ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+            }
+            ctx.restore();
+        }
+
         // ─── Render particles ───
         function renderParticles(nowMs) {
             const nowSec = nowMs / 1000;
@@ -1589,6 +1663,7 @@
                 updateSubtitle(syncTime);
             }
 
+            if (showSplineViz) renderSplineViz();
             renderParticles(timestamp);
             renderSubtitle();
 
