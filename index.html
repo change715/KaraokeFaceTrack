@@ -734,23 +734,62 @@
         }
         function getCalibKeyMap() { return CALIB_KEY_MAPS[calibTarget] || CALIB_KEY_MAPS.camera; }
 
+        // Get the base position for a point, accounting for corner keystone offsets.
+        // Corners: absolute position from params. Edge/grid: interpolated from actual corners + own offset.
+        function getCalibBasePos(name, w, h) {
+            const keyMap = getCalibKeyMap();
+            if (CALIB_CORNER_POS[name]) {
+                const [du, dv] = CALIB_CORNER_POS[name];
+                const kx = keyMap[name][0], ky = keyMap[name][1];
+                return { x: w * (du + P[kx] / 100), y: h * (dv + P[ky] / 100) };
+            }
+            // Get actual corner positions (with keystone offsets)
+            function cpos(cn) {
+                const [du, dv] = CALIB_CORNER_POS[cn];
+                const kx = keyMap[cn][0], ky = keyMap[cn][1];
+                return { x: w * (du + P[kx] / 100), y: h * (dv + P[ky] / 100) };
+            }
+            function lerp2(a, b, t) { return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }; }
+            const tl = cpos('TL'), tr = cpos('TR'), bl = cpos('BL'), br = cpos('BR');
+            // Edge points: interpolated from actual corners on the border
+            if (name.startsWith('E')) {
+                const edge = name[1], idx = parseInt(name[2]);
+                if (edge === 'T') return lerp2(tl, tr, idx === 1 ? P.gridV1 : P.gridV2);
+                if (edge === 'B') return lerp2(bl, br, idx === 1 ? P.gridV1 : P.gridV2);
+                if (edge === 'L') return lerp2(tl, bl, idx === 1 ? P.gridH1 : P.gridH2);
+                if (edge === 'R') return lerp2(tr, br, idx === 1 ? P.gridH1 : P.gridH2);
+            }
+            // Grid nodes: bilinear from actual corners at (gridV, gridH)
+            const row = parseInt(name[1]), col = parseInt(name[2]);
+            const u = row === 1 ? P.gridV1 : P.gridV2;
+            const v = col === 1 ? P.gridH1 : P.gridH2;
+            return bilerp(tl, tr, bl, br, u, v);
+        }
+
         function getCornerScreenPos(corner) {
             const keyMap = getCalibKeyMap();
             const w = dispCanvas.clientWidth, h = dispCanvas.clientHeight;
+            const base = getCalibBasePos(corner, w, h);
+            if (CALIB_CORNER_POS[corner]) return base;
+            // Non-corner points: base + own offset
             const kx = keyMap[corner][0], ky = keyMap[corner][1];
-            const [du, dv] = getCalibDefaultPos(corner);
-            const x = w * (du + P[kx] / 100);
-            const y = h * (dv + P[ky] / 100);
-            return { x, y };
+            return { x: base.x + w * (P[kx] / 100), y: base.y + h * (P[ky] / 100) };
         }
 
         function screenPosToParam(corner, sx, sy) {
             const keyMap = getCalibKeyMap();
             const w = dispCanvas.clientWidth, h = dispCanvas.clientHeight;
             const kx = keyMap[corner][0], ky = keyMap[corner][1];
-            const [du, dv] = getCalibDefaultPos(corner);
-            P[kx] = (sx / w - du) * 100;
-            P[ky] = (sy / h - dv) * 100;
+            if (CALIB_CORNER_POS[corner]) {
+                const [du, dv] = CALIB_CORNER_POS[corner];
+                P[kx] = (sx / w - du) * 100;
+                P[ky] = (sy / h - dv) * 100;
+            } else {
+                // Non-corner: offset from base position
+                const base = getCalibBasePos(corner, w, h);
+                P[kx] = (sx - base.x) / w * 100;
+                P[ky] = (sy - base.y) / h * 100;
+            }
             // Sync slider/number UI
             for (const k of [kx, ky]) {
                 const slider = tweaksPanel.querySelector(`input[type="range"][data-key="${k}"]`);
