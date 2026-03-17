@@ -1493,7 +1493,7 @@
         // Try face landmarks → face nose fallback → returns false if no face detected
         function tryFaceDetect(ts, timestamp) {
             if (!faceLandmarker) return false;
-            const results = faceLandmarker.detectForVideo(dispCanvas, ts);
+            const results = faceLandmarker.detectForVideo(video, ts);
             if (!results.faceLandmarks || results.faceLandmarks.length === 0) return false;
 
             const lm = results.faceLandmarks[0];
@@ -1546,7 +1546,7 @@
             if (ts <= lastPoseDetectTs) return false;
             lastPoseDetectTs = ts;
 
-            const results = poseLandmarker.detectForVideo(dispCanvas, ts);
+            const results = poseLandmarker.detectForVideo(video, ts);
             if (!results.landmarks || results.landmarks.length === 0) return false;
 
             const lm = results.landmarks[0];
