@@ -1339,6 +1339,10 @@
 
             dispCtx.save();
 
+            // Black background
+            dispCtx.fillStyle = '#000';
+            dispCtx.fillRect(0, 0, w, h);
+
             // Border
             dispCtx.strokeStyle = 'rgba(0, 180, 255, 0.8)';
             dispCtx.lineWidth = 3;
