@@ -1519,8 +1519,8 @@
             const rawX = trackX * canvas.width;
             const rawY = trackY * canvas.height;
             // Extract z-depth from landmarks (MediaPipe z is relative to face, negative = toward camera)
-            const trackZ = (upper && lower) ? (upper.z + lower.z) / 2 : (nose ? nose.z : 0);
-            const rawZ = (trackZ || 0) * canvas.width;
+            const trackZ = (upper && lower) ? (upper.z + lower.z) / 2 : (nose ? nose.z : undefined);
+            const rawZ = (trackZ != null) ? trackZ * canvas.width : smoothMouthZ;
 
             // Face yaw
             const rightEdge = lm[234], leftEdge = lm[454];
@@ -1586,7 +1586,7 @@
                 }
             }
 
-            const rawZ = (nose.z || 0) * canvas.width;
+            const rawZ = (nose.z != null) ? nose.z * canvas.width : smoothMouthZ;
             applyTracking(rawX, rawY, rawZ, estYaw, 0, timestamp);
             return true;
         }
