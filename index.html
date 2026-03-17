@@ -2088,6 +2088,23 @@
                 updateCalibCorners();
                 return;
             }
+            // Arrow key nudge for tracking offset when dot is shown
+            if (showTrackingDot && !calibMode && ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
+                e.preventDefault();
+                const step = e.ctrlKey || e.metaKey ? 10 : e.shiftKey ? 1 : 5;
+                if (e.key === 'ArrowLeft')  P.trackOffsetX -= step;
+                if (e.key === 'ArrowRight') P.trackOffsetX += step;
+                if (e.key === 'ArrowUp')    P.trackOffsetY -= step;
+                if (e.key === 'ArrowDown')  P.trackOffsetY += step;
+                // Sync UI
+                for (const k of ['trackOffsetX', 'trackOffsetY']) {
+                    const slider = tweaksPanel.querySelector(`input[type="range"][data-key="${k}"]`);
+                    const numInp = document.getElementById('val-' + k);
+                    if (slider) slider.value = P[k];
+                    if (numInp) numInp.value = P[k];
+                }
+                return;
+            }
             if (e.key === '1') {
                 toggleCleanMode();
             }
