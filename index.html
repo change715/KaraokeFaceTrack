@@ -301,7 +301,7 @@
             targetX:0, targetY:0.2,
             colorStartR:255, colorStartG:255, colorStartB:255,
             colorEndR:220, colorEndG:50, colorEndB:50,
-            burstDistance:300, burstDuration:0.3, targetNoise:60,
+            burstDistance:300, burstDuration:0.3, burstDistanceZ:150, targetNoise:60,
             fadeStart:0.8, fadeEnd:0.97, syncOffset:0,
             subX:0, subY:40, subScale:1, subMaxWidth:600,
             imgScale:1, imgX:0, imgY:0, imgRotation:0,
@@ -327,6 +327,10 @@
             lyricsFlipped: true,
             cameraMirrored: false,
             trackOffsetX: 0, trackOffsetY: 0,
+            // 3D / Perspective
+            midZ: 0.3, targetZ: 0.5, spawnZ: 0,
+            perspFov: 800, depthOpacity: 0.5, depthSizeScale: 0.5,
+            noiseAmpZ: 3, cp1AlongZ: -0.5, cp2AlongZ: 0.19,
             calibNudge: 0.5,
             cameraDeviceId: '',
         };
@@ -362,6 +366,7 @@
                 { accordion: 'Burst' },
                 { key: 'burstDistance', label: 'Burst dist (px)', min: 10, max: 600, step: 5 },
                 { key: 'burstDuration', label: 'Burst time %',    min: 0.02, max: 0.6, step: 0.01 },
+                { key: 'burstDistanceZ', label: 'Burst Z dist',  min: 0, max: 600, step: 5 },
                 { accordionEnd: true },
                 { accordion: 'Spline Shape' },
                 { key: 'cp1Along',     label: 'CP1 along',     min: -1.5, max: 2.0, step: 0.01 },
@@ -373,7 +378,18 @@
                 { key: 'targetX',      label: 'Target X %',    min: 0, max: 0.4, step: 0.01 },
                 { key: 'targetY',      label: 'Target Y %',    min: 0, max: 0.4, step: 0.01 },
                 { key: 'targetNoise',  label: 'End noise',     min: 0, max: 60, step: 1 },
+                { key: 'midZ',         label: 'Mid Z %',       min: -1.0, max: 1.0, step: 0.01 },
+                { key: 'targetZ',      label: 'Target Z %',    min: -1.0, max: 1.0, step: 0.01 },
+                { key: 'cp1AlongZ',    label: 'CP1 along Z',   min: -1.5, max: 2.0, step: 0.01 },
+                { key: 'cp2AlongZ',    label: 'CP2 along Z',   min: -1.5, max: 2.0, step: 0.01 },
                 { button: 'spline-viz-btn', label: 'Show Spline Path' },
+                { accordionEnd: true },
+                { accordion: '3D / Perspective' },
+                { key: 'perspFov',      label: 'FOV distance',     min: 200, max: 3000, step: 10 },
+                { key: 'depthSizeScale', label: 'Depth size fx',   min: 0, max: 1.0, step: 0.01 },
+                { key: 'depthOpacity',  label: 'Depth opacity fx', min: 0, max: 1.0, step: 0.01 },
+                { key: 'spawnZ',        label: 'Spawn Z offset',   min: -500, max: 500, step: 5 },
+                { key: 'noiseAmpZ',     label: 'Noise amp Z',      min: 0, max: 30, step: 0.5 },
                 { accordionEnd: true },
                 { accordion: 'Tracking' },
                 { key: 'mouthSmooth',  label: 'Smoothing',     min: 0, max: 0.95, step: 0.01 },
@@ -701,8 +717,8 @@
         let lyricsData       = [];
         let running          = false;
         let lastDetectTs     = -1;
-        let mouthX = 0, mouthY = 0;
-        let smoothMouthX = 0, smoothMouthY = 0;
+        let mouthX = 0, mouthY = 0, mouthZ = 0;
+        let smoothMouthX = 0, smoothMouthY = 0, smoothMouthZ = 0;
         let hasFace = false;
         let faceYaw = 0;       // -1 = facing left, +1 = facing right (screen space)
         let facePitch = 0;     // -1 = looking up, +1 = looking down
@@ -1456,20 +1472,22 @@
         let lastPoseDetectTs = -1;
 
         // Shared smoothing update for any tracking source
-        function applyTracking(rawX, rawY, clampedYaw, clampedPitch, timestamp) {
+        function applyTracking(rawX, rawY, rawZ, clampedYaw, clampedPitch, timestamp) {
             const sm = 1 - P.mouthSmooth;
             if (!hasFace) {
-                smoothMouthX = rawX; smoothMouthY = rawY;
+                smoothMouthX = rawX; smoothMouthY = rawY; smoothMouthZ = rawZ;
                 smoothYaw = clampedYaw;
                 smoothPitch = clampedPitch;
             } else {
                 smoothMouthX += (rawX - smoothMouthX) * sm;
                 smoothMouthY += (rawY - smoothMouthY) * sm;
+                smoothMouthZ += (rawZ - smoothMouthZ) * sm;
                 smoothYaw += (clampedYaw - smoothYaw) * sm * 0.5;
                 smoothPitch += (clampedPitch - smoothPitch) * sm * 0.5;
             }
             mouthX = smoothMouthX + P.trackOffsetX;
             mouthY = smoothMouthY + P.trackOffsetY;
+            mouthZ = smoothMouthZ + P.spawnZ;
             faceYaw = smoothYaw;
             facePitch = smoothPitch;
             hasFace = true;
@@ -1500,6 +1518,9 @@
 
             const rawX = trackX * canvas.width;
             const rawY = trackY * canvas.height;
+            // Extract z-depth from landmarks (MediaPipe z is relative to face, negative = toward camera)
+            const trackZ = (upper && lower) ? (upper.z + lower.z) / 2 : (nose ? nose.z : 0);
+            const rawZ = (trackZ || 0) * canvas.width;
 
             // Face yaw
             const rightEdge = lm[234], leftEdge = lm[454];
@@ -1517,7 +1538,7 @@
                 ? (nose.y - faceCY) / (faceH * 0.5)
                 : 0;
 
-            applyTracking(rawX, rawY,
+            applyTracking(rawX, rawY, rawZ,
                 Math.max(-1, Math.min(1, rawYaw)),
                 Math.max(-1, Math.min(1, rawPitch)),
                 timestamp);
@@ -1565,7 +1586,8 @@
                 }
             }
 
-            applyTracking(rawX, rawY, estYaw, 0, timestamp);
+            const rawZ = (nose.z || 0) * canvas.width;
+            applyTracking(rawX, rawY, rawZ, estYaw, 0, timestamp);
             return true;
         }
 
@@ -1609,37 +1631,42 @@
             const tyBase = H * P.targetY;
             const targetOffset = (Math.sin(p.seed * 7.13) * 0.5 + Math.sin(p.seed * 3.71) * 0.3 + Math.sin(p.seed * 11.3) * 0.2) * P.targetNoise;
             const ty = tyBase + targetOffset;
+            const tz = H * P.targetZ;
             // Fixed midpoint
             const mx = W * P.midX;
             const my = H * P.midY;
+            const mz = H * P.midZ;
+            const startZ = p.startZ || 0;
 
             // --- Segment 1: start → mid ---
-            const dx1 = mx - p.startX, dy1 = my - p.startY;
-            const len1 = Math.sqrt(dx1*dx1 + dy1*dy1) || 1;
-            const perp1x = -dy1 / len1, perp1y = dx1 / len1;
-            const cp1x = p.startX + dx1 * P.cp1Along + perp1x * len1 * P.cp1Perp;
-            const cp1y = p.startY + dy1 * P.cp1Along + perp1y * len1 * P.cp1Perp;
+            const dx1 = mx - p.startX, dy1 = my - p.startY, dz1 = mz - startZ;
+            const lenXY1 = Math.sqrt(dx1*dx1 + dy1*dy1) || 1;
+            const perp1x = -dy1 / lenXY1, perp1y = dx1 / lenXY1;
+            const cp1x = p.startX + dx1 * P.cp1Along + perp1x * lenXY1 * P.cp1Perp;
+            const cp1y = p.startY + dy1 * P.cp1Along + perp1y * lenXY1 * P.cp1Perp;
+            const cp1z = startZ + dz1 * P.cp1AlongZ;
 
             // --- Segment 2: mid → target ---
-            const dx2 = tx - mx, dy2 = ty - my;
-            const len2 = Math.sqrt(dx2*dx2 + dy2*dy2) || 1;
-            const perp2x = -dy2 / len2, perp2y = dx2 / len2;
-            const cp2x = mx + dx2 * P.cp2Along + perp2x * len2 * P.cp2Perp;
-            const cp2y = my + dy2 * P.cp2Along + perp2y * len2 * P.cp2Perp;
+            const dx2 = tx - mx, dy2 = ty - my, dz2 = tz - mz;
+            const lenXY2 = Math.sqrt(dx2*dx2 + dy2*dy2) || 1;
+            const perp2x = -dy2 / lenXY2, perp2y = dx2 / lenXY2;
+            const cp2x = mx + dx2 * P.cp2Along + perp2x * lenXY2 * P.cp2Perp;
+            const cp2y = my + dy2 * P.cp2Along + perp2y * lenXY2 * P.cp2Perp;
+            const cp2z = mz + dz2 * P.cp2AlongZ;
 
             if (t <= 0.5) {
-                // First half: start → cp1 → cp1 → mid (quadratic-like via cubic)
                 const lt = t * 2;
                 return {
                     x: cubicBezier(lt, p.startX, cp1x, cp1x, mx),
                     y: cubicBezier(lt, p.startY, cp1y, cp1y, my),
+                    z: cubicBezier(lt, startZ, cp1z, cp1z, mz),
                 };
             } else {
-                // Second half: mid → cp2 → cp2 → target
                 const lt = (t - 0.5) * 2;
                 return {
                     x: cubicBezier(lt, mx, cp2x, cp2x, tx),
                     y: cubicBezier(lt, my, cp2y, cp2y, ty),
+                    z: cubicBezier(lt, mz, cp2z, cp2z, tz),
                 };
             }
         }
@@ -1685,14 +1712,17 @@
                 const baseAngle = Math.atan2(dirY, dirX);
                 const spread = (Math.random() - 0.5) * 0.8;
                 const burstAngle = baseAngle + spread;
+                const burstDz = -facePitch * 0.5 + (Math.random() - 0.5) * 0.3;
                 particles.push({
                     char: text[charSpawnIndex],
                     spawnTime: now,
                     startX: mouthX,
                     startY: mouthY,
+                    startZ: mouthZ,
                     seed: Math.random() * 100,
                     burstDx: Math.cos(burstAngle),
                     burstDy: Math.sin(burstAngle),
+                    burstDz: burstDz,
                 });
                 charSpawnIndex++;
             }
@@ -1836,22 +1866,36 @@
             return 1 - Math.pow(1 - t, 3);
         }
 
+        // ─── 3D perspective projection ───
+        // z=0 is screen plane, z>0 is further away, z<0 is closer
+        function perspProject(x, y, z) {
+            const fov = P.perspFov;
+            const safeZ = Math.max(z, -fov + 1);
+            const scale = fov / (fov + safeZ);
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+            return {
+                x: cx + (x - cx) * scale,
+                y: cy + (y - cy) * scale,
+                scale: scale,
+            };
+        }
+
         // ─── Render spline visualizer ───
         function renderSplineViz() {
             if (!hasFace) return;
             const W = canvas.width, H = canvas.height;
-            // Draw a few sample splines from the current mouth position with varying seeds
             const seeds = [0, 15, 30, 50, 70, 85];
             ctx.save();
             for (let si = 0; si < seeds.length; si++) {
                 const seed = seeds[si];
-                const fakeP = { startX: mouthX, startY: mouthY, seed };
-                // Sample the cubic bezier path
+                const fakeP = { startX: mouthX, startY: mouthY, startZ: mouthZ, seed };
                 const steps = 40;
                 ctx.beginPath();
                 for (let i = 0; i <= steps; i++) {
                     const t = i / steps;
-                    const pos = getParticlePos(fakeP, t);
+                    const pos3d = getParticlePos(fakeP, t);
+                    const pos = perspProject(pos3d.x, pos3d.y, pos3d.z);
                     if (i === 0) ctx.moveTo(pos.x, pos.y);
                     else ctx.lineTo(pos.x, pos.y);
                 }
@@ -1866,42 +1910,52 @@
                     const tyBase = H * P.targetY;
                     const targetOffset = (Math.sin(seed * 7.13) * 0.5 + Math.sin(seed * 3.71) * 0.3 + Math.sin(seed * 11.3) * 0.2) * P.targetNoise;
                     const ty = tyBase + targetOffset;
-                    const mx = W * P.midX, my = H * P.midY;
+                    const tz = H * P.targetZ;
+                    const mx = W * P.midX, my = H * P.midY, mz = H * P.midZ;
+                    const startZ = fakeP.startZ || 0;
                     // Segment 1: start → mid
-                    const dx1 = mx - fakeP.startX, dy1 = my - fakeP.startY;
-                    const len1 = Math.sqrt(dx1*dx1 + dy1*dy1) || 1;
-                    const perp1x = -dy1 / len1, perp1y = dx1 / len1;
-                    const cp1x = fakeP.startX + dx1 * P.cp1Along + perp1x * len1 * P.cp1Perp;
-                    const cp1y = fakeP.startY + dy1 * P.cp1Along + perp1y * len1 * P.cp1Perp;
+                    const dx1 = mx - fakeP.startX, dy1 = my - fakeP.startY, dz1 = mz - startZ;
+                    const lenXY1 = Math.sqrt(dx1*dx1 + dy1*dy1) || 1;
+                    const perp1x = -dy1 / lenXY1, perp1y = dx1 / lenXY1;
+                    const cp1x = fakeP.startX + dx1 * P.cp1Along + perp1x * lenXY1 * P.cp1Perp;
+                    const cp1y = fakeP.startY + dy1 * P.cp1Along + perp1y * lenXY1 * P.cp1Perp;
+                    const cp1z = startZ + dz1 * P.cp1AlongZ;
                     // Segment 2: mid → target
-                    const dx2 = tx - mx, dy2 = ty - my;
-                    const len2 = Math.sqrt(dx2*dx2 + dy2*dy2) || 1;
-                    const perp2x = -dy2 / len2, perp2y = dx2 / len2;
-                    const cp2x = mx + dx2 * P.cp2Along + perp2x * len2 * P.cp2Perp;
-                    const cp2y = my + dy2 * P.cp2Along + perp2y * len2 * P.cp2Perp;
+                    const dx2 = tx - mx, dy2 = ty - my, dz2 = tz - mz;
+                    const lenXY2 = Math.sqrt(dx2*dx2 + dy2*dy2) || 1;
+                    const perp2x = -dy2 / lenXY2, perp2y = dx2 / lenXY2;
+                    const cp2x = mx + dx2 * P.cp2Along + perp2x * lenXY2 * P.cp2Perp;
+                    const cp2y = my + dy2 * P.cp2Along + perp2y * lenXY2 * P.cp2Perp;
+                    const cp2z = mz + dz2 * P.cp2AlongZ;
+                    // Project all control points
+                    const pStart = perspProject(fakeP.startX, fakeP.startY, startZ);
+                    const pCp1 = perspProject(cp1x, cp1y, cp1z);
+                    const pMid = perspProject(mx, my, mz);
+                    const pCp2 = perspProject(cp2x, cp2y, cp2z);
+                    const pTarget = perspProject(tx, ty, tz);
                     // CP1
                     ctx.fillStyle = 'rgba(255,100,100,0.8)';
-                    ctx.beginPath(); ctx.arc(cp1x, cp1y, 5, 0, Math.PI * 2); ctx.fill();
+                    ctx.beginPath(); ctx.arc(pCp1.x, pCp1.y, 5, 0, Math.PI * 2); ctx.fill();
                     // Midpoint
                     ctx.fillStyle = 'rgba(255,200,50,0.8)';
-                    ctx.beginPath(); ctx.arc(mx, my, 6, 0, Math.PI * 2); ctx.fill();
+                    ctx.beginPath(); ctx.arc(pMid.x, pMid.y, 6, 0, Math.PI * 2); ctx.fill();
                     // CP2
                     ctx.fillStyle = 'rgba(100,100,255,0.8)';
-                    ctx.beginPath(); ctx.arc(cp2x, cp2y, 5, 0, Math.PI * 2); ctx.fill();
+                    ctx.beginPath(); ctx.arc(pCp2.x, pCp2.y, 5, 0, Math.PI * 2); ctx.fill();
                     // Target
                     ctx.fillStyle = 'rgba(100,255,100,0.8)';
-                    ctx.beginPath(); ctx.arc(tx, ty, 5, 0, Math.PI * 2); ctx.fill();
+                    ctx.beginPath(); ctx.arc(pTarget.x, pTarget.y, 5, 0, Math.PI * 2); ctx.fill();
                     // Start
                     ctx.fillStyle = 'rgba(255,255,100,0.8)';
-                    ctx.beginPath(); ctx.arc(fakeP.startX, fakeP.startY, 5, 0, Math.PI * 2); ctx.fill();
+                    ctx.beginPath(); ctx.arc(pStart.x, pStart.y, 5, 0, Math.PI * 2); ctx.fill();
                     // Tangent lines
                     ctx.setLineDash([4, 4]);
                     ctx.strokeStyle = 'rgba(255,255,255,0.3)';
                     ctx.lineWidth = 1;
-                    ctx.beginPath(); ctx.moveTo(fakeP.startX, fakeP.startY); ctx.lineTo(cp1x, cp1y); ctx.stroke();
-                    ctx.beginPath(); ctx.moveTo(cp1x, cp1y); ctx.lineTo(mx, my); ctx.stroke();
-                    ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(cp2x, cp2y); ctx.stroke();
-                    ctx.beginPath(); ctx.moveTo(cp2x, cp2y); ctx.lineTo(tx, ty); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(pStart.x, pStart.y); ctx.lineTo(pCp1.x, pCp1.y); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(pCp1.x, pCp1.y); ctx.lineTo(pMid.x, pMid.y); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(pMid.x, pMid.y); ctx.lineTo(pCp2.x, pCp2.y); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(pCp2.x, pCp2.y); ctx.lineTo(pTarget.x, pTarget.y); ctx.stroke();
                     ctx.setLineDash([]);
                 }
             }
@@ -1913,61 +1967,74 @@
             const nowSec = nowMs / 1000;
             particles = particles.filter(p => (nowSec - p.spawnTime) < P.charLifetime);
 
+            // Precompute 3D positions for depth sorting
+            const renderList = [];
             for (const p of particles) {
                 const age = nowSec - p.spawnTime;
                 const linearT = Math.min(age / P.charLifetime, 1.0);
-
-                // Ease-out: particles shoot forward from the mouth quickly,
-                // then slow down and spread out — making words readable at the far end
                 const t = easeOutCubic(linearT);
-
                 const splinePos = getParticlePos(p, t);
 
-                // Burst phase: for the first ~8% of life, shoot outward from the mouth
-                // then smoothly blend into the spline path
+                // Burst phase with 3D
                 let pos;
                 if (linearT < P.burstDuration) {
-                    const burstT = linearT / P.burstDuration; // 0→1 during burst
-                    const burstEased = 1 - Math.pow(1 - burstT, 2); // ease-out
+                    const burstT = linearT / P.burstDuration;
+                    const burstEased = 1 - Math.pow(1 - burstT, 2);
                     const burstX = p.startX + p.burstDx * P.burstDistance * burstEased;
                     const burstY = p.startY + p.burstDy * P.burstDistance * burstEased;
-                    // Blend from burst position to spline position
-                    const blend = burstT * burstT; // ease-in blend toward spline
+                    const burstZ = (p.startZ || 0) + (p.burstDz || 0) * P.burstDistanceZ * burstEased;
+                    const blend = burstT * burstT;
                     pos = {
                         x: lerp(burstX, splinePos.x, blend),
                         y: lerp(burstY, splinePos.y, blend),
+                        z: lerp(burstZ, splinePos.z, blend),
                     };
                 } else {
                     pos = splinePos;
                 }
 
-                // Noise: perpendicular wobble
-                const noiseVal = noise(age * P.noiseFreq, p.seed) * P.noiseAmp;
+                // Noise in Y and Z
+                const noiseValY = noise(age * P.noiseFreq, p.seed) * P.noiseAmp;
+                const noiseValZ = noise(age * P.noiseFreq + 100, p.seed) * P.noiseAmpZ;
 
-                // Opacity: fade in, then fade out well before reaching spline end
+                pos.y += noiseValY;
+                pos.z += noiseValZ;
+
+                renderList.push({ p, pos, linearT, t });
+            }
+
+            // Depth sort: back-to-front (larger z = farther = render first)
+            renderList.sort((a, b) => b.pos.z - a.pos.z);
+
+            for (const { p, pos, linearT, t } of renderList) {
+                // Project 3D → 2D
+                const proj = perspProject(pos.x, pos.y, pos.z);
+
+                // Opacity: fade in, then fade out
                 let alpha = 1.0;
                 if (t < P.fadeInEnd) {
                     alpha = t <= P.fadeInStart ? 0 : (t - P.fadeInStart) / (P.fadeInEnd - P.fadeInStart);
                 }
-                // Fade based on eased spline position — chars disappear before
-                // they pile up at the endpoint
                 if (t > P.fadeStart) {
                     alpha *= 1.0 - (t - P.fadeStart) / (P.fadeEnd - P.fadeStart);
                 }
+                // Depth-based opacity modulation
+                const depthAlpha = lerp(1.0, proj.scale, P.depthOpacity);
+                alpha *= Math.max(0.1, Math.min(1.5, depthAlpha));
                 alpha = Math.max(0, Math.min(1, alpha));
                 if (alpha <= 0) continue;
 
-                // Color: continuous gradient from start → end over lifetime
+                // Color
                 const r = Math.round(lerp(P.colorStartR, P.colorEndR, linearT));
                 const g = Math.round(lerp(P.colorStartG, P.colorEndG, linearT));
                 const b = Math.round(lerp(P.colorStartB, P.colorEndB, linearT));
 
-                // Size: spawn tiny, grow to full size as they travel out
-                // Shoots out small from mouth, reaches full size around 30% of life
+                // Size with depth scaling
                 const growT = Math.min(linearT / 0.3, 1.0);
-                const growEased = 1 - Math.pow(1 - growT, 2); // ease-out quad
-                const scale = lerp(0.15, 1.0, growEased);
-                const size = P.charSize * scale;
+                const growEased = 1 - Math.pow(1 - growT, 2);
+                const baseScale = lerp(0.15, 1.0, growEased);
+                const depthScale = lerp(1.0, proj.scale, P.depthSizeScale);
+                const size = P.charSize * baseScale * Math.max(0.2, depthScale);
 
                 ctx.save();
                 ctx.globalAlpha = alpha;
@@ -1977,7 +2044,7 @@
                 ctx.shadowBlur = 4;
                 ctx.shadowOffsetX = 1;
                 ctx.shadowOffsetY = 1;
-                ctx.fillText(p.char, pos.x, pos.y + noiseVal);
+                ctx.fillText(p.char, proj.x, proj.y);
                 ctx.restore();
             }
         }
@@ -2008,12 +2075,14 @@
             renderParticles(timestamp);
             renderSubtitle();
 
-            // Mouth dot (toggle via button)
+            // Mouth dot (toggle via button, projected in 3D)
             if (hasFace && showTrackingDot) {
+                const dotProj = perspProject(mouthX, mouthY, mouthZ);
+                const dotSize = 4 * lerp(1.0, dotProj.scale, P.depthSizeScale);
                 ctx.save();
                 ctx.globalAlpha = 0.3;
                 ctx.beginPath();
-                ctx.arc(mouthX, mouthY, 4, 0, Math.PI * 2);
+                ctx.arc(dotProj.x, dotProj.y, Math.max(2, dotSize), 0, Math.PI * 2);
                 ctx.fillStyle = '#ff88cc';
                 ctx.fill();
                 ctx.restore();
