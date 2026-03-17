@@ -2108,6 +2108,18 @@
             if (e.key === '1') {
                 toggleCleanMode();
             }
+            if (e.key === 'p' || e.key === 'P') {
+                // Toggle parameters UI only (no camera feed change)
+                const isHidden = tweaksToggle.style.display === 'none';
+                tweaksToggle.style.display = isHidden ? '' : 'none';
+                if (!isHidden) {
+                    tweaksPanel.classList.remove('open');
+                    tweaksPanel.style.display = 'none';
+                } else {
+                    tweaksPanel.style.display = '';
+                }
+                statusEl.style.display = isHidden ? '' : 'none';
+            }
             if (e.key === '2') {
                 // Restart song from the beginning
                 audio.currentTime = 0;
