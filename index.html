@@ -487,6 +487,7 @@
             html += `</div>`;
             html += `<button class="tweak-btn" id="grid-toggle-btn">Show Output Grid</button>`;
             html += `<button class="tweak-btn" id="tracking-dot-btn">Show Tracking Dot</button>`;
+            html += `<button class="tweak-btn" id="hide-camera-btn">Hide Camera Feed</button>`;
             html += `<button class="tweak-btn" id="set-defaults-btn">Set Current as Default</button>`;
             html += `<button class="tweak-btn" id="reset-defaults-btn" style="color:#ff8888;border-color:rgba(255,136,136,0.4);background:rgba(255,136,136,0.1)">Reset to Original Defaults</button>`;
             html += `<button class="tweak-btn" id="hide-ui-btn" style="color:#ffcc66;border-color:rgba(255,204,102,0.4);background:rgba(255,204,102,0.1)">Hide UI (Press 1)</button>`;
@@ -572,6 +573,12 @@
             document.getElementById('tracking-dot-btn').addEventListener('click', () => {
                 showTrackingDot = !showTrackingDot;
                 document.getElementById('tracking-dot-btn').textContent = showTrackingDot ? 'Hide Tracking Dot' : 'Show Tracking Dot';
+            });
+
+            // Hide camera feed toggle button
+            document.getElementById('hide-camera-btn').addEventListener('click', () => {
+                hideCameraFeed = !hideCameraFeed;
+                document.getElementById('hide-camera-btn').textContent = hideCameraFeed ? 'Show Camera Feed' : 'Hide Camera Feed';
             });
 
             // Rebuild the corner/point selector dropdown for current sub-mode
@@ -691,6 +698,7 @@
         let showSplineViz    = false;
         let showInputGrid    = false;
         let showTrackingDot  = false;
+        let hideCameraFeed   = false;
         let calibMode        = false;
         let calibTarget      = null; // 'camera' or 'output'
         let calibSubMode     = 'keystone'; // 'keystone' or 'gridwarp'
@@ -1184,6 +1192,12 @@
             if (!w || !h || video.readyState < 2) return;
 
             dispCtx.clearRect(0, 0, w, h);
+
+            if (hideCameraFeed) {
+                dispCtx.fillStyle = '#000';
+                dispCtx.fillRect(0, 0, w, h);
+                return;
+            }
 
             const vw = video.videoWidth, vh = video.videoHeight;
             const crop = coverRect(vw, vh, w, h);
