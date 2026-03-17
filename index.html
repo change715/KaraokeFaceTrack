@@ -2108,17 +2108,17 @@
             if (e.key === '1') {
                 toggleCleanMode();
             }
-            if (e.key === 'p' || e.key === 'P') {
-                // Toggle parameters UI only (no camera feed change)
-                const isHidden = tweaksToggle.style.display === 'none';
-                tweaksToggle.style.display = isHidden ? '' : 'none';
-                if (!isHidden) {
+            if ((e.key === 'p' || e.key === 'P') && !e.target.closest('input, select, textarea')) {
+                // Toggle parameters UI only — never touch dispCanvas (camera feed)
+                const showing = tweaksToggle.style.display !== 'none';
+                tweaksToggle.style.display = showing ? 'none' : '';
+                statusEl.style.display = showing ? 'none' : '';
+                if (showing) {
                     tweaksPanel.classList.remove('open');
                     tweaksPanel.style.display = 'none';
                 } else {
                     tweaksPanel.style.display = '';
                 }
-                statusEl.style.display = isHidden ? '' : 'none';
             }
             if (e.key === '2') {
                 // Restart song from the beginning
