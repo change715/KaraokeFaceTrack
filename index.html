@@ -326,6 +326,7 @@
             outScale:1, outImgX:0, outImgY:0, outRotation:0,
             lyricsFlipped: true,
             cameraMirrored: false,
+            trackOffsetX: 0, trackOffsetY: 0,
             calibNudge: 0.5,
             cameraDeviceId: '',
         };
@@ -376,6 +377,8 @@
                 { accordionEnd: true },
                 { accordion: 'Tracking' },
                 { key: 'mouthSmooth',  label: 'Smoothing',     min: 0, max: 0.95, step: 0.01 },
+                { key: 'trackOffsetX', label: 'Offset X (px)', min: -500, max: 500, step: 1 },
+                { key: 'trackOffsetY', label: 'Offset Y (px)', min: -500, max: 500, step: 1 },
                 { accordionEnd: true },
                 { accordion: 'Sync' },
                 { key: 'syncOffset',   label: 'Offset (s)',    min: -5, max: 5, step: 0.05 },
@@ -472,6 +475,7 @@
             html += `<div style="display:flex;gap:6px;margin:10px 0 4px 0"><button class="tweak-btn" id="play-btn" style="margin:0;flex:1">Play</button><button class="tweak-btn" id="pause-btn" style="margin:0;flex:1">Pause</button><button class="tweak-btn" id="restart-btn" style="margin:0;flex:1">Restart</button></div>`;
             html += `<button class="tweak-btn" id="flip-lyrics-btn">Flip Lyrics Horizontally</button>`;
             html += `<button class="tweak-btn" id="mirror-cam-btn">${P.cameraMirrored ? 'Unmirror Camera' : 'Mirror Camera'}</button>`;
+            html += `<button class="tweak-btn" id="input-grid-btn">Show Input Grid</button>`;
             html += `<button class="tweak-btn" id="calibrate-btn">Calibrate Camera</button>`;
             html += `<button class="tweak-btn" id="calibrate-out-btn">Calibrate Output</button>`;
             html += `<div id="calib-controls" style="display:none;margin:6px 0">`;
@@ -555,6 +559,12 @@
             document.getElementById('grid-toggle-btn').addEventListener('click', () => {
                 showOutputGrid = !showOutputGrid;
                 document.getElementById('grid-toggle-btn').textContent = showOutputGrid ? 'Hide Output Grid' : 'Show Output Grid';
+            });
+
+            // Input grid toggle button
+            document.getElementById('input-grid-btn').addEventListener('click', () => {
+                showInputGrid = !showInputGrid;
+                document.getElementById('input-grid-btn').textContent = showInputGrid ? 'Hide Input Grid' : 'Show Input Grid';
             });
 
             // Rebuild the corner/point selector dropdown for current sub-mode
@@ -672,6 +682,7 @@
         let cameraMirrored   = P.cameraMirrored;
         let showOutputGrid   = false;
         let showSplineViz    = false;
+        let showInputGrid    = false;
         let calibMode        = false;
         let calibTarget      = null; // 'camera' or 'output'
         let calibSubMode     = 'keystone'; // 'keystone' or 'gridwarp'
@@ -1322,6 +1333,39 @@
         }
 
         // ─── Output grid overlay ───
+        function renderInputGrid() {
+            const w = dispCanvas.width, h = dispCanvas.height;
+            if (!w || !h) return;
+
+            dispCtx.save();
+
+            // Border
+            dispCtx.strokeStyle = 'rgba(0, 180, 255, 0.8)';
+            dispCtx.lineWidth = 3;
+            dispCtx.strokeRect(0, 0, w, h);
+
+            // Grid lines
+            dispCtx.strokeStyle = 'rgba(0, 180, 255, 0.3)';
+            dispCtx.lineWidth = 1;
+            const cols = 3, rows = 3;
+            for (let i = 1; i < cols; i++) {
+                const x = (w * i) / cols;
+                dispCtx.beginPath();
+                dispCtx.moveTo(x, 0);
+                dispCtx.lineTo(x, h);
+                dispCtx.stroke();
+            }
+            for (let i = 1; i < rows; i++) {
+                const y = (h * i) / rows;
+                dispCtx.beginPath();
+                dispCtx.moveTo(0, y);
+                dispCtx.lineTo(w, y);
+                dispCtx.stroke();
+            }
+
+            dispCtx.restore();
+        }
+
         function renderOutputGrid() {
             const w = canvas.width, h = canvas.height;
             let grid = getGrid16('out', w, h);
@@ -1412,8 +1456,8 @@
                 smoothYaw += (clampedYaw - smoothYaw) * sm * 0.5;
                 smoothPitch += (clampedPitch - smoothPitch) * sm * 0.5;
             }
-            mouthX = smoothMouthX;
-            mouthY = smoothMouthY;
+            mouthX = smoothMouthX + P.trackOffsetX;
+            mouthY = smoothMouthY + P.trackOffsetY;
             faceYaw = smoothYaw;
             facePitch = smoothPitch;
             hasFace = true;
@@ -1934,6 +1978,7 @@
             if (!running) return;
             syncCanvasSize();
             drawWarpedVideo();
+            if (showInputGrid) renderInputGrid();
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
             if (timestamp - lastFaceDetect > FACE_DETECT_INTERVAL) {
