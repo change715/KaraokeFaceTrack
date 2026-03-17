@@ -487,7 +487,7 @@
             html += `</div>`;
             html += `<button class="tweak-btn" id="grid-toggle-btn">Show Output Grid</button>`;
             html += `<button class="tweak-btn" id="tracking-dot-btn">Show Tracking Dot</button>`;
-            html += `<button class="tweak-btn" id="hide-camera-btn">Hide Camera Feed</button>`;
+            html += `<button class="tweak-btn" id="hide-camera-btn">Hide Camera Feed (Press 3)</button>`;
             html += `<button class="tweak-btn" id="set-defaults-btn">Set Current as Default</button>`;
             html += `<button class="tweak-btn" id="reset-defaults-btn" style="color:#ff8888;border-color:rgba(255,136,136,0.4);background:rgba(255,136,136,0.1)">Reset to Original Defaults</button>`;
             html += `<button class="tweak-btn" id="hide-ui-btn" style="color:#ffcc66;border-color:rgba(255,204,102,0.4);background:rgba(255,204,102,0.1)">Hide UI (Press 1)</button>`;
@@ -578,7 +578,7 @@
             // Hide camera feed toggle button
             document.getElementById('hide-camera-btn').addEventListener('click', () => {
                 hideCameraFeed = !hideCameraFeed;
-                document.getElementById('hide-camera-btn').textContent = hideCameraFeed ? 'Show Camera Feed' : 'Hide Camera Feed';
+                document.getElementById('hide-camera-btn').textContent = hideCameraFeed ? 'Show Camera Feed (Press 3)' : 'Hide Camera Feed (Press 3)';
             });
 
             // Rebuild the corner/point selector dropdown for current sub-mode
@@ -2133,6 +2133,20 @@
                     audio.play().catch(err => log('Audio error: ' + err.message));
                 }
                 log('Restarted');
+            }
+            if (e.key === '3') {
+                // Show tweaks panel without camera feed for calibration
+                hideCameraFeed = !hideCameraFeed;
+                document.getElementById('hide-camera-btn').textContent = hideCameraFeed ? 'Show Camera Feed (Press 3)' : 'Hide Camera Feed (Press 3)';
+                if (hideCameraFeed) {
+                    // Show UI controls but hide camera
+                    dispCanvas.style.display = '';
+                    tweaksToggle.style.display = '';
+                    tweaksPanel.style.display = '';
+                    tweaksPanel.classList.add('open');
+                    statusEl.style.display = '';
+                    cleanMode = false;
+                }
             }
         });
 
