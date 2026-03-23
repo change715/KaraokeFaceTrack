@@ -301,7 +301,8 @@
             targetX:0, targetY:0.2,
             colorStartR:255, colorStartG:255, colorStartB:255,
             colorEndR:220, colorEndG:50, colorEndB:50,
-            burstDistance:300, burstDuration:0.3, dirSensitivity:0.15, targetNoise:60,
+            burstDistance:300, burstDuration:0.3, dirSensitivity:0.15,
+            charSpread:0.15, wordGap:3, targetNoise:60,
             fadeStart:0.8, fadeEnd:0.97, syncOffset:0,
             subX:0, subY:40, subScale:1, subMaxWidth:600,
             imgScale:1, imgX:0, imgY:0, imgRotation:0,
@@ -363,6 +364,8 @@
                 { key: 'burstDistance', label: 'Burst dist (px)', min: 10, max: 600, step: 5 },
                 { key: 'burstDuration', label: 'Burst time %',    min: 0.02, max: 0.6, step: 0.01 },
                 { key: 'dirSensitivity', label: 'Dir sensitivity', min: 0, max: 1.0, step: 0.01 },
+                { key: 'charSpread', label: 'Char spread', min: 0, max: 0.5, step: 0.01 },
+                { key: 'wordGap', label: 'Word gap', min: 1, max: 8, step: 0.1 },
                 { accordionEnd: true },
                 { accordion: 'Spline Shape' },
                 { key: 'cp1Along',     label: 'CP1 along',     min: -1.5, max: 2.0, step: 0.01 },
@@ -1699,6 +1702,18 @@
                 const baseAngle = Math.atan2(dirY, dirX);
                 const indexOffset = (charSpawnIndex / Math.max(text.length - 1, 1) - 0.5) * 0.15;
                 const burstAngle = baseAngle + indexOffset;
+                // Word-aware spacing: letters get weight 1, spaces get wordGap
+                let spacingSum = 0;
+                for (let ci = 0; ci < charSpawnIndex; ci++) {
+                    spacingSum += (text[ci] === ' ') ? P.wordGap : 1;
+                }
+                let totalSpacing = 0;
+                for (let ci = 0; ci < text.length - 1; ci++) {
+                    totalSpacing += (text[ci] === ' ') ? P.wordGap : 1;
+                }
+                const tOffset = totalSpacing > 0
+                    ? (spacingSum / totalSpacing) * P.charSpread
+                    : 0;
                 particles.push({
                     char: text[charSpawnIndex],
                     spawnTime: now,
@@ -1709,6 +1724,7 @@
                     burstDy: Math.sin(burstAngle),
                     charIndex: charSpawnIndex,
                     totalChars: text.length,
+                    tOffset,
                 });
                 charSpawnIndex++;
             }
@@ -1953,7 +1969,8 @@
 
                 // Ease-out: particles shoot forward from the mouth quickly,
                 // then slow down and spread out — making words readable at the far end
-                const t = easeOutQuad(linearT);
+                // Subtract per-char offset so later chars trail behind, keeping words grouped
+                const t = Math.max(0, easeOutQuad(linearT) - (p.tOffset || 0));
 
                 const splinePos = getParticlePos(p, t);
 
