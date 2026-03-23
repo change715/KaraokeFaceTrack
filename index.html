@@ -301,7 +301,7 @@
             targetX:0, targetY:0.2,
             colorStartR:255, colorStartG:255, colorStartB:255,
             colorEndR:220, colorEndG:50, colorEndB:50,
-            burstDistance:300, burstDuration:0.3, targetNoise:60,
+            burstDistance:300, burstDuration:0.3, dirSensitivity:0.15, targetNoise:60,
             fadeStart:0.8, fadeEnd:0.97, syncOffset:0,
             subX:0, subY:40, subScale:1, subMaxWidth:600,
             imgScale:1, imgX:0, imgY:0, imgRotation:0,
@@ -362,6 +362,7 @@
                 { accordion: 'Burst' },
                 { key: 'burstDistance', label: 'Burst dist (px)', min: 10, max: 600, step: 5 },
                 { key: 'burstDuration', label: 'Burst time %',    min: 0.02, max: 0.6, step: 0.01 },
+                { key: 'dirSensitivity', label: 'Dir sensitivity', min: 0, max: 1.0, step: 0.01 },
                 { accordionEnd: true },
                 { accordion: 'Spline Shape' },
                 { key: 'cp1Along',     label: 'CP1 along',     min: -1.5, max: 2.0, step: 0.01 },
@@ -1689,7 +1690,7 @@
                 let dirY = facePitch; // up/down
                 // Normalize; if face is nearly centered, default to left burst
                 let dirLen = Math.sqrt(dirX * dirX + dirY * dirY);
-                if (dirLen < 0.15) {
+                if (dirLen < P.dirSensitivity) {
                     dirX = -1; dirY = -0.2; dirLen = Math.sqrt(dirX * dirX + dirY * dirY);
                 }
                 dirX /= dirLen; dirY /= dirLen;
