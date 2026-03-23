@@ -294,7 +294,7 @@
         // ─── Tweakable params ───
         // Hardcoded fallback defaults
         const P_HARDCODED = {
-            charSize:80, depthScale:0.3, depthFullAt:0.5, charLifetime:4, noiseAmp:7, noiseFreq:2.5,
+            charSize:80, depthScale:0.3, depthFullAt:0.5, depthEaseIn:1, depthEaseOut:2, charLifetime:4, noiseAmp:7, noiseFreq:2.5,
             mouthSmooth:0.8, fadeInStart:0, fadeInEnd:0.12,
             cp1Along:-0.5, cp1Perp:0.48, cp2Along:0.19, cp2Perp:0.24,
             midX:0.15, midY:0.35, midTanIn:0.3, midTanOut:0.3,
@@ -353,6 +353,8 @@
                 { key: 'charSize',     label: 'Font size',     min: 16, max: 200, step: 1 },
                 { key: 'depthScale',   label: 'Depth scale',   min: 0.1, max: 1.0, step: 0.01 },
                 { key: 'depthFullAt',  label: 'Depth full at', min: 0.05, max: 1.0, step: 0.01 },
+                { key: 'depthEaseIn',  label: 'Depth ease in',  min: 0.5, max: 5.0, step: 0.1 },
+                { key: 'depthEaseOut', label: 'Depth ease out', min: 0.5, max: 5.0, step: 0.1 },
                 { key: 'charLifetime', label: 'Lifetime (s)',  min: 1,  max: 10, step: 0.1 },
                 { key: 'noiseAmp',     label: 'Noise amp',     min: 0,  max: 30, step: 0.5 },
                 { key: 'noiseFreq',    label: 'Noise freq',    min: 0.5, max: 8, step: 0.1 },
@@ -2001,7 +2003,8 @@
                 // Depth scale: characters start small (far from camera) and grow
                 // to full size by depthFullAt, staying full size after
                 const depthT = Math.min(t / P.depthFullAt, 1.0);
-                const depthEased = 1 - Math.pow(1 - depthT, 2); // ease-out
+                const tA = Math.pow(depthT, P.depthEaseIn);
+                const depthEased = tA / (tA + Math.pow(1 - depthT, P.depthEaseOut));
                 const scale = lerp(P.depthScale, 1.0, depthEased);
                 const size = P.charSize * scale;
 
