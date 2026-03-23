@@ -1681,10 +1681,11 @@
                     dirX = -1; dirY = -0.2; dirLen = Math.sqrt(dirX * dirX + dirY * dirY);
                 }
                 dirX /= dirLen; dirY /= dirLen;
-                // Add random spread (±0.4 radians)
+                // Small sequential perpendicular offset so chars don't stack perfectly
+                // but remain lined up in the burst direction
                 const baseAngle = Math.atan2(dirY, dirX);
-                const spread = (Math.random() - 0.5) * 0.8;
-                const burstAngle = baseAngle + spread;
+                const indexOffset = (charSpawnIndex / Math.max(text.length - 1, 1) - 0.5) * 0.15;
+                const burstAngle = baseAngle + indexOffset;
                 particles.push({
                     char: text[charSpawnIndex],
                     spawnTime: now,
@@ -1693,6 +1694,8 @@
                     seed: Math.random() * 100,
                     burstDx: Math.cos(burstAngle),
                     burstDy: Math.sin(burstAngle),
+                    charIndex: charSpawnIndex,
+                    totalChars: text.length,
                 });
                 charSpawnIndex++;
             }
