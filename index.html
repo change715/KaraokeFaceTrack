@@ -1604,28 +1604,31 @@
         // Two-segment cubic bezier: start → CP1 → mid, mid → CP2 → target
         function getParticlePos(p, t) {
             const W = canvas.width, H = canvas.height;
+            // Mirror X positions and curve direction when facing right
+            const mirror = p.facingRight;
+            const perpSign = mirror ? -1 : 1;
             // Target with per-particle vertical noise
-            const tx = W * P.targetX;
+            const tx = mirror ? W * (1 - P.targetX) : W * P.targetX;
             const tyBase = H * P.targetY;
             const targetOffset = (Math.sin(p.seed * 7.13) * 0.5 + Math.sin(p.seed * 3.71) * 0.3 + Math.sin(p.seed * 11.3) * 0.2) * P.targetNoise;
             const ty = tyBase + targetOffset;
-            // Fixed midpoint
-            const mx = W * P.midX;
+            // Fixed midpoint (mirrored when facing right)
+            const mx = mirror ? W * (1 - P.midX) : W * P.midX;
             const my = H * P.midY;
 
             // --- Segment 1: start → mid ---
             const dx1 = mx - p.startX, dy1 = my - p.startY;
             const len1 = Math.sqrt(dx1*dx1 + dy1*dy1) || 1;
             const perp1x = -dy1 / len1, perp1y = dx1 / len1;
-            const cp1x = p.startX + dx1 * P.cp1Along + perp1x * len1 * P.cp1Perp;
-            const cp1y = p.startY + dy1 * P.cp1Along + perp1y * len1 * P.cp1Perp;
+            const cp1x = p.startX + dx1 * P.cp1Along + perp1x * len1 * P.cp1Perp * perpSign;
+            const cp1y = p.startY + dy1 * P.cp1Along + perp1y * len1 * P.cp1Perp * perpSign;
 
             // --- Segment 2: mid → target ---
             const dx2 = tx - mx, dy2 = ty - my;
             const len2 = Math.sqrt(dx2*dx2 + dy2*dy2) || 1;
             const perp2x = -dy2 / len2, perp2y = dx2 / len2;
-            const cp2x = mx + dx2 * P.cp2Along + perp2x * len2 * P.cp2Perp;
-            const cp2y = my + dy2 * P.cp2Along + perp2y * len2 * P.cp2Perp;
+            const cp2x = mx + dx2 * P.cp2Along + perp2x * len2 * P.cp2Perp * perpSign;
+            const cp2y = my + dy2 * P.cp2Along + perp2y * len2 * P.cp2Perp * perpSign;
 
             if (t <= 0.5) {
                 // First half: start → cp1 → cp1 → mid (quadratic-like via cubic)
@@ -1693,6 +1696,7 @@
                     seed: Math.random() * 100,
                     burstDx: Math.cos(burstAngle),
                     burstDy: Math.sin(burstAngle),
+                    facingRight: faceYaw > 0,
                 });
                 charSpawnIndex++;
             }
@@ -1845,7 +1849,7 @@
             ctx.save();
             for (let si = 0; si < seeds.length; si++) {
                 const seed = seeds[si];
-                const fakeP = { startX: mouthX, startY: mouthY, seed };
+                const fakeP = { startX: mouthX, startY: mouthY, seed, facingRight: faceYaw > 0 };
                 // Sample the cubic bezier path
                 const steps = 40;
                 ctx.beginPath();
@@ -1862,23 +1866,25 @@
 
                 // Draw control points for the first spline
                 if (si === 0) {
-                    const tx = W * P.targetX;
+                    const vizMirror = faceYaw > 0;
+                    const vizPerpSign = vizMirror ? -1 : 1;
+                    const tx = vizMirror ? W * (1 - P.targetX) : W * P.targetX;
                     const tyBase = H * P.targetY;
                     const targetOffset = (Math.sin(seed * 7.13) * 0.5 + Math.sin(seed * 3.71) * 0.3 + Math.sin(seed * 11.3) * 0.2) * P.targetNoise;
                     const ty = tyBase + targetOffset;
-                    const mx = W * P.midX, my = H * P.midY;
+                    const mx = vizMirror ? W * (1 - P.midX) : W * P.midX, my = H * P.midY;
                     // Segment 1: start → mid
                     const dx1 = mx - fakeP.startX, dy1 = my - fakeP.startY;
                     const len1 = Math.sqrt(dx1*dx1 + dy1*dy1) || 1;
                     const perp1x = -dy1 / len1, perp1y = dx1 / len1;
-                    const cp1x = fakeP.startX + dx1 * P.cp1Along + perp1x * len1 * P.cp1Perp;
-                    const cp1y = fakeP.startY + dy1 * P.cp1Along + perp1y * len1 * P.cp1Perp;
+                    const cp1x = fakeP.startX + dx1 * P.cp1Along + perp1x * len1 * P.cp1Perp * vizPerpSign;
+                    const cp1y = fakeP.startY + dy1 * P.cp1Along + perp1y * len1 * P.cp1Perp * vizPerpSign;
                     // Segment 2: mid → target
                     const dx2 = tx - mx, dy2 = ty - my;
                     const len2 = Math.sqrt(dx2*dx2 + dy2*dy2) || 1;
                     const perp2x = -dy2 / len2, perp2y = dx2 / len2;
-                    const cp2x = mx + dx2 * P.cp2Along + perp2x * len2 * P.cp2Perp;
-                    const cp2y = my + dy2 * P.cp2Along + perp2y * len2 * P.cp2Perp;
+                    const cp2x = mx + dx2 * P.cp2Along + perp2x * len2 * P.cp2Perp * vizPerpSign;
+                    const cp2y = my + dy2 * P.cp2Along + perp2y * len2 * P.cp2Perp * vizPerpSign;
                     // CP1
                     ctx.fillStyle = 'rgba(255,100,100,0.8)';
                     ctx.beginPath(); ctx.arc(cp1x, cp1y, 5, 0, Math.PI * 2); ctx.fill();
