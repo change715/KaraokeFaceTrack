@@ -302,7 +302,7 @@
             colorStartR:255, colorStartG:255, colorStartB:255,
             colorEndR:220, colorEndG:50, colorEndB:50,
             burstDistance:300, burstDuration:0.3, dirSensitivity:0.15,
-            charSpread:0.15, wordGap:3, targetNoise:60,
+            charSpread:200, wordGap:3, targetNoise:60,
             fadeStart:0.8, fadeEnd:0.97, syncOffset:0,
             subX:0, subY:40, subScale:1, subMaxWidth:600,
             imgScale:1, imgX:0, imgY:0, imgRotation:0,
@@ -364,7 +364,7 @@
                 { key: 'burstDistance', label: 'Burst dist (px)', min: 10, max: 600, step: 5 },
                 { key: 'burstDuration', label: 'Burst time %',    min: 0.02, max: 0.6, step: 0.01 },
                 { key: 'dirSensitivity', label: 'Dir sensitivity', min: 0, max: 1.0, step: 0.01 },
-                { key: 'charSpread', label: 'Char spread', min: 0, max: 0.5, step: 0.01 },
+                { key: 'charSpread', label: 'Char spread', min: 0, max: 800, step: 5 },
                 { key: 'wordGap', label: 'Word gap', min: 1, max: 8, step: 0.1 },
                 { accordionEnd: true },
                 { accordion: 'Spline Shape' },
@@ -1711,8 +1711,8 @@
                 for (let ci = 0; ci < text.length - 1; ci++) {
                     totalSpacing += (text[ci] === ' ') ? P.wordGap : 1;
                 }
-                const tOffset = totalSpacing > 0
-                    ? (spacingSum / totalSpacing) * P.charSpread
+                const spacingFrac = totalSpacing > 0
+                    ? (spacingSum / totalSpacing)
                     : 0;
                 particles.push({
                     char: text[charSpawnIndex],
@@ -1724,7 +1724,7 @@
                     burstDy: Math.sin(burstAngle),
                     charIndex: charSpawnIndex,
                     totalChars: text.length,
-                    tOffset,
+                    spacingFrac,
                 });
                 charSpawnIndex++;
             }
@@ -1969,10 +1969,23 @@
 
                 // Ease-out: particles shoot forward from the mouth quickly,
                 // then slow down and spread out — making words readable at the far end
-                // Subtract per-char offset so later chars trail behind, keeping words grouped
-                const t = Math.max(0, easeOutQuad(linearT) - (p.tOffset || 0));
+                const t = easeOutQuad(linearT);
 
                 const splinePos = getParticlePos(p, t);
+
+                // Offset along spline tangent for word-grouped spacing
+                // Later chars get pushed backward along the curve so words stay together
+                if (P.charSpread > 0 && (p.spacingFrac || 0) > 0) {
+                    const dt = 0.005;
+                    const tangentSample = getParticlePos(p, Math.min(t + dt, 1));
+                    let tanDx = tangentSample.x - splinePos.x;
+                    let tanDy = tangentSample.y - splinePos.y;
+                    const tanLen = Math.sqrt(tanDx * tanDx + tanDy * tanDy) || 1;
+                    tanDx /= tanLen; tanDy /= tanLen;
+                    const offsetPx = p.spacingFrac * P.charSpread;
+                    splinePos.x -= tanDx * offsetPx;
+                    splinePos.y -= tanDy * offsetPx;
+                }
 
                 // Burst phase: for the first ~8% of life, shoot outward from the mouth
                 // then smoothly blend into the spline path
