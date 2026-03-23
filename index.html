@@ -297,7 +297,7 @@
             charSize:80, charLifetime:4, noiseAmp:7, noiseFreq:2.5,
             mouthSmooth:0.8, fadeInStart:0, fadeInEnd:0.12,
             cp1Along:-0.5, cp1Perp:0.48, cp2Along:0.19, cp2Perp:0.24,
-            midX:0.15, midY:0.35, midTangentLen:0.3,
+            midX:0.15, midY:0.35, midTanIn:0.3, midTanOut:0.3,
             targetX:0, targetY:0.2,
             colorStartR:255, colorStartG:255, colorStartB:255,
             colorEndR:220, colorEndG:50, colorEndB:50,
@@ -370,7 +370,8 @@
                 { key: 'cp2Perp',      label: 'CP2 perp',      min: -1.0, max: 1.0, step: 0.01 },
                 { key: 'midX',         label: 'Mid X %',       min: 0, max: 1.0, step: 0.01 },
                 { key: 'midY',         label: 'Mid Y %',       min: 0, max: 1.0, step: 0.01 },
-                { key: 'midTangentLen', label: 'Mid tangent',   min: 0, max: 1.0, step: 0.01 },
+                { key: 'midTanIn',  label: 'Mid tan in',  min: 0, max: 1.0, step: 0.01 },
+                { key: 'midTanOut', label: 'Mid tan out', min: 0, max: 1.0, step: 0.01 },
                 { key: 'targetX',      label: 'Target X %',    min: 0, max: 0.4, step: 0.01 },
                 { key: 'targetY',      label: 'Target Y %',    min: 0, max: 0.4, step: 0.01 },
                 { key: 'targetNoise',  label: 'End noise',     min: 0, max: 60, step: 1 },
@@ -1632,12 +1633,13 @@
             const tdx = tx - p.startX, tdy = ty - p.startY;
             const tLen = Math.sqrt(tdx * tdx + tdy * tdy) || 1;
             const avgSegLen = (len1 + len2) * 0.5;
-            const handleLen = avgSegLen * P.midTangentLen;
+            const handleLenIn  = avgSegLen * P.midTanIn;
+            const handleLenOut = avgSegLen * P.midTanOut;
             const tanUx = tdx / tLen, tanUy = tdy / tLen;
-            const midBeforeX = mx - tanUx * handleLen;
-            const midBeforeY = my - tanUy * handleLen;
-            const midAfterX  = mx + tanUx * handleLen;
-            const midAfterY  = my + tanUy * handleLen;
+            const midBeforeX = mx - tanUx * handleLenIn;
+            const midBeforeY = my - tanUy * handleLenIn;
+            const midAfterX  = mx + tanUx * handleLenOut;
+            const midAfterY  = my + tanUy * handleLenOut;
 
             if (t <= 0.5) {
                 const lt = t * 2;
@@ -1911,12 +1913,13 @@
                     const tdx = tx - fakeP.startX, tdy = ty - fakeP.startY;
                     const tLen = Math.sqrt(tdx * tdx + tdy * tdy) || 1;
                     const avgSegLen = (len1 + len2) * 0.5;
-                    const handleLen = avgSegLen * P.midTangentLen;
+                    const handleLenIn  = avgSegLen * P.midTanIn;
+                    const handleLenOut = avgSegLen * P.midTanOut;
                     const tanUx = tdx / tLen, tanUy = tdy / tLen;
-                    const midBeforeX = mx - tanUx * handleLen;
-                    const midBeforeY = my - tanUy * handleLen;
-                    const midAfterX  = mx + tanUx * handleLen;
-                    const midAfterY  = my + tanUy * handleLen;
+                    const midBeforeX = mx - tanUx * handleLenIn;
+                    const midBeforeY = my - tanUy * handleLenIn;
+                    const midAfterX  = mx + tanUx * handleLenOut;
+                    const midAfterY  = my + tanUy * handleLenOut;
 
                     // Tangent lines
                     ctx.setLineDash([4, 4]);
