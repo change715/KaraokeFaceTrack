@@ -297,7 +297,7 @@
             charSize:80, charLifetime:4, noiseAmp:7, noiseFreq:2.5,
             mouthSmooth:0.8, fadeInStart:0, fadeInEnd:0.12,
             cp1Along:-0.5, cp1Perp:0.48, cp2Along:0.19, cp2Perp:0.24,
-            midX:0.15, midY:0.35,
+            midX:0.15, midY:0.35, midTangentLen:0.3,
             targetX:0, targetY:0.2,
             colorStartR:255, colorStartG:255, colorStartB:255,
             colorEndR:220, colorEndG:50, colorEndB:50,
@@ -370,6 +370,7 @@
                 { key: 'cp2Perp',      label: 'CP2 perp',      min: -1.0, max: 1.0, step: 0.01 },
                 { key: 'midX',         label: 'Mid X %',       min: 0, max: 1.0, step: 0.01 },
                 { key: 'midY',         label: 'Mid Y %',       min: 0, max: 1.0, step: 0.01 },
+                { key: 'midTangentLen', label: 'Mid tangent',   min: 0, max: 1.0, step: 0.01 },
                 { key: 'targetX',      label: 'Target X %',    min: 0, max: 0.4, step: 0.01 },
                 { key: 'targetY',      label: 'Target Y %',    min: 0, max: 0.4, step: 0.01 },
                 { key: 'targetNoise',  label: 'End noise',     min: 0, max: 60, step: 1 },
@@ -1627,19 +1628,28 @@
             const cp2x = mx + dx2 * P.cp2Along + perp2x * len2 * P.cp2Perp;
             const cp2y = my + dy2 * P.cp2Along + perp2y * len2 * P.cp2Perp;
 
+            // Shared tangent at mid for C1 continuity (smooth curve through midpoint)
+            const tdx = tx - p.startX, tdy = ty - p.startY;
+            const tLen = Math.sqrt(tdx * tdx + tdy * tdy) || 1;
+            const avgSegLen = (len1 + len2) * 0.5;
+            const handleLen = avgSegLen * P.midTangentLen;
+            const tanUx = tdx / tLen, tanUy = tdy / tLen;
+            const midBeforeX = mx - tanUx * handleLen;
+            const midBeforeY = my - tanUy * handleLen;
+            const midAfterX  = mx + tanUx * handleLen;
+            const midAfterY  = my + tanUy * handleLen;
+
             if (t <= 0.5) {
-                // First half: start → cp1 → cp1 → mid (quadratic-like via cubic)
                 const lt = t * 2;
                 return {
-                    x: cubicBezier(lt, p.startX, cp1x, cp1x, mx),
-                    y: cubicBezier(lt, p.startY, cp1y, cp1y, my),
+                    x: cubicBezier(lt, p.startX, cp1x, midBeforeX, mx),
+                    y: cubicBezier(lt, p.startY, cp1y, midBeforeY, my),
                 };
             } else {
-                // Second half: mid → cp2 → cp2 → target
                 const lt = (t - 0.5) * 2;
                 return {
-                    x: cubicBezier(lt, mx, cp2x, cp2x, tx),
-                    y: cubicBezier(lt, my, cp2y, cp2y, ty),
+                    x: cubicBezier(lt, mx, midAfterX, cp2x, tx),
+                    y: cubicBezier(lt, my, midAfterY, cp2y, ty),
                 };
             }
         }
@@ -1834,9 +1844,9 @@
         // ─── Lerp helper ───
         function lerp(a, b, t) { return a + (b - a) * t; }
 
-        // ─── Ease-out: fast start, slow finish (chars shoot out then drift) ───
-        function easeOutCubic(t) {
-            return 1 - Math.pow(1 - t, 3);
+        // ─── Ease-out (quadratic): gentler than cubic for more consistent speed ───
+        function easeOutQuad(t) {
+            return 1 - (1 - t) * (1 - t);
         }
 
         // ─── Render spline visualizer ───
@@ -1897,15 +1907,32 @@
                     // Start
                     ctx.fillStyle = 'rgba(255,255,100,0.8)';
                     ctx.beginPath(); ctx.arc(fakeP.startX, fakeP.startY, 5, 0, Math.PI * 2); ctx.fill();
+                    // Compute mid tangent handles (same as getParticlePos)
+                    const tdx = tx - fakeP.startX, tdy = ty - fakeP.startY;
+                    const tLen = Math.sqrt(tdx * tdx + tdy * tdy) || 1;
+                    const avgSegLen = (len1 + len2) * 0.5;
+                    const handleLen = avgSegLen * P.midTangentLen;
+                    const tanUx = tdx / tLen, tanUy = tdy / tLen;
+                    const midBeforeX = mx - tanUx * handleLen;
+                    const midBeforeY = my - tanUy * handleLen;
+                    const midAfterX  = mx + tanUx * handleLen;
+                    const midAfterY  = my + tanUy * handleLen;
+
                     // Tangent lines
                     ctx.setLineDash([4, 4]);
                     ctx.strokeStyle = 'rgba(255,255,255,0.3)';
                     ctx.lineWidth = 1;
                     ctx.beginPath(); ctx.moveTo(fakeP.startX, fakeP.startY); ctx.lineTo(cp1x, cp1y); ctx.stroke();
-                    ctx.beginPath(); ctx.moveTo(cp1x, cp1y); ctx.lineTo(mx, my); ctx.stroke();
-                    ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(cp2x, cp2y); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(cp1x, cp1y); ctx.lineTo(midBeforeX, midBeforeY); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(midBeforeX, midBeforeY); ctx.lineTo(mx, my); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(midAfterX, midAfterY); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(midAfterX, midAfterY); ctx.lineTo(cp2x, cp2y); ctx.stroke();
                     ctx.beginPath(); ctx.moveTo(cp2x, cp2y); ctx.lineTo(tx, ty); ctx.stroke();
                     ctx.setLineDash([]);
+                    // Mid tangent handle points
+                    ctx.fillStyle = 'rgba(255,150,50,0.7)';
+                    ctx.beginPath(); ctx.arc(midBeforeX, midBeforeY, 4, 0, Math.PI * 2); ctx.fill();
+                    ctx.beginPath(); ctx.arc(midAfterX, midAfterY, 4, 0, Math.PI * 2); ctx.fill();
                 }
             }
             ctx.restore();
@@ -1922,7 +1949,7 @@
 
                 // Ease-out: particles shoot forward from the mouth quickly,
                 // then slow down and spread out — making words readable at the far end
-                const t = easeOutCubic(linearT);
+                const t = easeOutQuad(linearT);
 
                 const splinePos = getParticlePos(p, t);
 
