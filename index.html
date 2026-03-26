@@ -1994,29 +1994,31 @@
 
             for (const p of particles) {
                 const age = nowSec - p.spawnTime;
-                let linearT = Math.min((age * fontSpeedScale) / P.charLifetime, 1.0);
 
-                // Ease-out: particles shoot forward from the mouth quickly,
-                // then slow down and spread out — making words readable at the far end
+                // Base t (un-scaled by font size) — used for spelling transition
+                // timing so the transition window stays consistent regardless of
+                // font size changes.
+                const baseLinearT = Math.min(age / P.charLifetime, 1.0);
+                const baseT = easeOutQuad(baseLinearT);
+
+                // Font-scaled t — used for positioning (spreads chars apart)
+                let linearT = Math.min((age * fontSpeedScale) / P.charLifetime, 1.0);
                 let t = easeOutQuad(linearT);
 
                 // ─── Spelling transition: phonetic → finalWord ───
-                // Compute transition progress (0→1) over the configured spline t window
+                // Compute from baseT so transition timing responds to the
+                // spellTransStart/End sliders independent of font size.
                 let spellTransProgress = 0;
                 if (p.isKept !== undefined) {
                     spellTransProgress = Math.max(0, Math.min(1,
-                        (t - P.spellTransStart) / (P.spellTransEnd - P.spellTransStart)));
+                        (baseT - P.spellTransStart) / (P.spellTransEnd - P.spellTransStart)));
                 }
 
-                // For "kept" particles: boost age so they speed up and close gaps
-                // left by disappearing extra chars. extrasBefore is CUMULATIVE
-                // (total extras from word start), so consecutive kept chars after
-                // the same gap all get the same boost, preserving their spacing.
-                // Uses segDuration (actual spawn distribution time) for correct scaling.
+                // For "kept" particles: boost age to close gaps from disappeared extras.
+                // Includes fontSpeedScale so the boost is consistent with the scaled positioning.
                 if (p.isKept && spellTransProgress > 0 && p.extrasBefore > 0) {
                     const ageBoost = spellTransProgress * (p.extrasBefore / p.totalChars) * p.segDuration;
-                    const boostedAge = age + ageBoost;
-                    linearT = Math.min(boostedAge / P.charLifetime, 1.0);
+                    linearT = Math.min((age * fontSpeedScale + ageBoost) / P.charLifetime, 1.0);
                     t = easeOutQuad(linearT);
                 }
 
