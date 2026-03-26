@@ -995,17 +995,19 @@
                 if (phonetic && final_) {
                     charMap = [];
                     let fi = 0; // pointer into finalWord
+                    let totalExtras = 0; // cumulative count of ALL extras from start of word
                     for (let ci = 0; ci < phonetic.length; ci++) {
                         if (fi < final_.length && phonetic[ci].toLowerCase() === final_[fi].toLowerCase()) {
-                            charMap.push({ kept: true, finalChar: final_[fi], finalIndex: fi });
+                            // extrasBefore is CUMULATIVE — total extras from start of word
+                            // This ensures all kept chars after a gap get the same minimum
+                            // boost, maintaining their relative spacing
+                            charMap.push({ kept: true, finalChar: final_[fi], extrasBefore: totalExtras });
                             fi++;
                         } else {
-                            charMap.push({ kept: false, finalChar: null, finalIndex: -1 });
+                            charMap.push({ kept: false, finalChar: null, extrasBefore: 0 });
+                            totalExtras++;
                         }
                     }
-                    // Store total kept count so particles can redistribute evenly
-                    const totalKept = fi;
-                    for (const entry of charMap) entry.totalKept = totalKept;
                 }
 
                 return {
@@ -1741,11 +1743,10 @@
                     burstDy: Math.sin(burstAngle),
                     charIndex: charSpawnIndex,
                     totalChars: text.length,
-                    // Spelling transition data (undefined if no phoneticWord/finalWord)
+                    // Spelling transition data (null if no phoneticWord/finalWord)
                     isKept: cm ? cm.kept : undefined,
                     finalChar: cm ? cm.finalChar : undefined,
-                    finalIndex: cm ? cm.finalIndex : -1,
-                    totalKept: cm ? cm.totalKept : 0,
+                    extrasBefore: cm ? cm.extrasBefore : 0,
                     segDuration: cm ? segDuration : 0,
                 });
                 charSpawnIndex++;
@@ -2001,16 +2002,15 @@
                         (t - P.spellTransStart) / (P.spellTransEnd - P.spellTransStart)));
                 }
 
-                // For "kept" particles: redistribute along spline to close gaps.
-                // Each kept char lerps from its phonetic position (charIndex/totalChars)
-                // to its final word position (finalIndex/totalKept), ensuring even
-                // spacing regardless of charLifetime.
-                if (p.isKept && spellTransProgress > 0 && p.totalKept > 0) {
-                    const phoneticSlot = p.charIndex / p.totalChars;
-                    const finalSlot = p.finalIndex / p.totalKept;
-                    const ageOffset = spellTransProgress * (phoneticSlot - finalSlot) * p.segDuration;
-                    const effectiveAge = Math.max(0, age + ageOffset);
-                    linearT = Math.min(effectiveAge / P.charLifetime, 1.0);
+                // For "kept" particles: boost age so they speed up and close gaps
+                // left by disappearing extra chars. extrasBefore is CUMULATIVE
+                // (total extras from word start), so consecutive kept chars after
+                // the same gap all get the same boost, preserving their spacing.
+                // Uses segDuration (actual spawn distribution time) for correct scaling.
+                if (p.isKept && spellTransProgress > 0 && p.extrasBefore > 0) {
+                    const ageBoost = spellTransProgress * (p.extrasBefore / p.totalChars) * p.segDuration;
+                    const boostedAge = age + ageBoost;
+                    linearT = Math.min(boostedAge / P.charLifetime, 1.0);
                     t = easeOutQuad(linearT);
                 }
 
