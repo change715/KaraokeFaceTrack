@@ -996,18 +996,38 @@
                 const final_ = (seg.finalWord || '').trim();
                 if (phonetic && final_) {
                     charMap = [];
-                    let fi = 0; // pointer into finalWord
-                    let totalExtras = 0; // cumulative count of ALL extras from start of word
+                    let fi = 0;
+                    let totalExtras = 0;
                     for (let ci = 0; ci < phonetic.length; ci++) {
                         if (fi < final_.length && phonetic[ci].toLowerCase() === final_[fi].toLowerCase()) {
-                            // extrasBefore is CUMULATIVE — total extras from start of word
-                            // This ensures all kept chars after a gap get the same minimum
-                            // boost, maintaining their relative spacing
                             charMap.push({ kept: true, finalChar: final_[fi], extrasBefore: totalExtras });
                             fi++;
                         } else {
                             charMap.push({ kept: false, finalChar: null, extrasBefore: 0 });
                             totalExtras++;
+                        }
+                    }
+                    // Second pass: for each gap of extras before a kept char,
+                    // assign gapIndex (0 = closest to approaching kept) and gapSize
+                    // so extras can fade sequentially as the kept char passes them.
+                    for (let ci = charMap.length - 1; ci >= 0; ci--) {
+                        if (charMap[ci].kept) {
+                            // Walk backward through the extras preceding this kept char
+                            let gapIdx = 0;
+                            for (let ei = ci - 1; ei >= 0 && !charMap[ei].kept; ei--) {
+                                charMap[ei].gapIndex = gapIdx++;
+                            }
+                            const gapSize = gapIdx;
+                            for (let ei = ci - 1; ei >= 0 && !charMap[ei].kept; ei--) {
+                                charMap[ei].gapSize = gapSize;
+                            }
+                        }
+                    }
+                    // Handle trailing extras (after last kept char) — fade all at once
+                    for (const entry of charMap) {
+                        if (!entry.kept && entry.gapSize === undefined) {
+                            entry.gapIndex = 0;
+                            entry.gapSize = 1;
                         }
                     }
                 }
@@ -1749,6 +1769,8 @@
                     isKept: cm ? cm.kept : undefined,
                     finalChar: cm ? cm.finalChar : undefined,
                     extrasBefore: cm ? cm.extrasBefore : 0,
+                    gapIndex: cm ? (cm.gapIndex || 0) : 0,
+                    gapSize: cm ? (cm.gapSize || 1) : 1,
                     segDuration: segDuration,
                 });
                 charSpawnIndex++;
@@ -2057,9 +2079,14 @@
                     alpha *= 1.0 - (t - P.fadeStart) / (P.fadeEnd - P.fadeStart);
                 }
 
-                // Spelling transition: fade out extra (non-kept) chars
+                // Spelling transition: fade out extra chars sequentially as
+                // the approaching kept char passes each one
                 if (p.isKept === false && spellTransProgress > 0) {
-                    alpha *= Math.pow(1.0 - spellTransProgress, P.spellFadeSpeed);
+                    const fadeStart = p.gapIndex / p.gapSize;
+                    const fadeEnd = (p.gapIndex + 1) / p.gapSize;
+                    const localFade = Math.max(0, Math.min(1,
+                        (spellTransProgress - fadeStart) / (fadeEnd - fadeStart)));
+                    alpha *= Math.pow(1.0 - localFade, P.spellFadeSpeed);
                 }
 
                 alpha = Math.max(0, Math.min(1, alpha));
@@ -2097,9 +2124,13 @@
                     }
                 }
 
-                // Spelling transition: scale down extra (non-kept) chars as they fade
+                // Spelling transition: scale down extra chars sequentially
                 if (p.isKept === false && spellTransProgress > 0) {
-                    size *= Math.pow(1.0 - spellTransProgress, P.spellFadeSpeed);
+                    const fadeStart = p.gapIndex / p.gapSize;
+                    const fadeEnd = (p.gapIndex + 1) / p.gapSize;
+                    const localFade = Math.max(0, Math.min(1,
+                        (spellTransProgress - fadeStart) / (fadeEnd - fadeStart)));
+                    size *= Math.pow(1.0 - localFade, P.spellFadeSpeed);
                 }
 
                 ctx.save();
