@@ -1007,6 +1007,7 @@
                             totalExtras++;
                         }
                     }
+                    charMap.finalLength = fi; // number of kept chars (= finalWord length matched)
                     // Second pass: for each gap of extras before a kept char,
                     // assign gapIndex (0 = closest to approaching kept) and gapSize
                     // so extras can fade sequentially as the kept char passes them.
@@ -1771,6 +1772,7 @@
                     extrasBefore: cm ? cm.extrasBefore : 0,
                     gapIndex: cm ? (cm.gapIndex || 0) : 0,
                     gapSize: cm ? (cm.gapSize || 1) : 1,
+                    finalLength: currentSeg.charMap ? (currentSeg.charMap.finalLength || text.length) : text.length,
                     segDuration: segDuration,
                 });
                 charSpawnIndex++;
@@ -2037,16 +2039,21 @@
                         (baseT - P.spellTransStart) / (P.spellTransEnd - P.spellTransStart)));
                 }
 
-                // For "kept" particles: boost age to close gaps from disappeared extras.
-                // Includes fontSpeedScale so the boost is consistent with the scaled positioning.
-                if (p.isKept && spellTransProgress > 0 && p.extrasBefore > 0) {
-                    const ageBoost = spellTransProgress * (p.extrasBefore / p.totalChars) * p.segDuration;
-                    linearT = Math.min((age * fontSpeedScale + ageBoost) / P.charLifetime, 1.0);
-                    // Cap position during transition so kept chars don't overshoot into fade zone
-                    if (spellTransProgress < 1 && linearT > P.fadeStart) {
-                        linearT = P.fadeStart;
-                    }
-                    t = easeOutQuad(linearT);
+                // For "kept" particles: interpolate position toward a grouped target
+                // so all kept chars converge into a readable word during the transition.
+                if (p.isKept && spellTransProgress > 0) {
+                    const naturalT = t;
+                    // Estimate first char's t (charIndex=0 is oldest, furthest along spline)
+                    const firstCharAge = age + (p.charIndex / p.totalChars) * p.segDuration;
+                    const firstLinearT = Math.min((firstCharAge * fontSpeedScale) / P.charLifetime, 1.0);
+                    const firstT = easeOutQuad(firstLinearT);
+                    // Position in final word (0-indexed)
+                    const ki = p.charIndex - p.extrasBefore;
+                    // Target: evenly space kept chars behind the first char
+                    const tSpacing = (P.charSize * 0.7) / canvas.width;
+                    const targetT = Math.max(0, firstT - ki * tSpacing);
+                    // Smoothly interpolate from natural spread to grouped word
+                    t = lerp(naturalT, targetT, spellTransProgress);
                 }
 
                 const splinePos = getParticlePos(p, t);
