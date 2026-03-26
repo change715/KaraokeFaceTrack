@@ -1987,7 +1987,7 @@
             const nowSec = nowMs / 1000;
             particles = particles.filter(p => (nowSec - p.spawnTime) < P.charLifetime);
 
-            // ── Pass 1: compute base t and metadata for each particle ──
+            // ── Pass 1: compute position, alpha, color, size for each particle ──
             const renderData = [];
             for (const p of particles) {
                 const age = nowSec - p.spawnTime;
@@ -2008,7 +2008,27 @@
                     t = easeOutQuad(linearT);
                 }
 
-                // Alpha (computed early so we can skip invisible particles)
+                const splinePos = getParticlePos(p, t);
+
+                // Burst phase
+                let pos;
+                if (linearT < P.burstDuration) {
+                    const burstT = linearT / P.burstDuration;
+                    const burstEased = 1 - Math.pow(1 - burstT, 2);
+                    const burstX = p.startX + p.burstDx * P.burstDistance * burstEased;
+                    const burstY = p.startY + p.burstDy * P.burstDistance * burstEased;
+                    const blend = burstT * burstT;
+                    pos = {
+                        x: lerp(burstX, splinePos.x, blend),
+                        y: lerp(burstY, splinePos.y, blend),
+                    };
+                } else {
+                    pos = splinePos;
+                }
+
+                const noiseVal = noise(age * P.noiseFreq, p.seed) * P.noiseAmp;
+
+                // Alpha
                 let alpha = 1.0;
                 if (t < P.fadeInEnd) {
                     alpha = t <= P.fadeInStart ? 0 : (t - P.fadeInStart) / (P.fadeInEnd - P.fadeInStart);
@@ -2022,7 +2042,12 @@
                 alpha = Math.max(0, Math.min(1, alpha));
                 if (alpha <= 0) continue;
 
-                // Depth scale (needed for min-spacing calc)
+                // Color
+                const r = Math.round(lerp(P.colorStartR, P.colorEndR, linearT));
+                const g = Math.round(lerp(P.colorStartG, P.colorEndG, linearT));
+                const b = Math.round(lerp(P.colorStartB, P.colorEndB, linearT));
+
+                // Depth scale
                 const depthT = Math.min(t / P.depthFullAt, 1.0);
                 const tA = Math.pow(depthT, P.depthEaseIn);
                 const depthEased = tA / (tA + Math.pow(1 - depthT, P.depthEaseOut));
@@ -2032,21 +2057,14 @@
                 const displayChar = (p.isKept && p.finalChar && spellTransProgress >= 1) ? p.finalChar : p.char;
 
                 renderData.push({
-                    p, t, linearT, age, alpha, size, displayChar, spellTransProgress,
+                    p, pos, noiseVal, alpha, r, g, b, size, displayChar,
                     segIndex: p.segIndex, charIndex: p.charIndex,
-                    noiseVal: noise(age * P.noiseFreq, p.seed) * P.noiseAmp,
-                    r: Math.round(lerp(P.colorStartR, P.colorEndR, linearT)),
-                    g: Math.round(lerp(P.colorStartG, P.colorEndG, linearT)),
-                    b: Math.round(lerp(P.colorStartB, P.colorEndB, linearT)),
-                    pos: null, // computed after spacing adjustment
                 });
             }
 
-            // ── Pass 2: enforce minimum spacing by adjusting t values ──
-            // Group by segment, sort oldest-first (lowest charIndex = furthest
-            // along spline = highest t). Walk from oldest to newest; if a char
-            // is too close to the previous one, pull its t back (toward the mouth)
-            // so it sits at minimum readable distance, still on the spline.
+            // ── Pass 2: cascade minimum spacing per segment ──
+            // Group by segment, sort oldest-first (lowest charIndex = spawned first
+            // = furthest along spline), then walk forward enforcing min distance.
             const segGroups = new Map();
             for (const rd of renderData) {
                 if (!segGroups.has(rd.segIndex)) segGroups.set(rd.segIndex, []);
@@ -2054,55 +2072,19 @@
             }
             for (const group of segGroups.values()) {
                 group.sort((a, b) => a.charIndex - b.charIndex); // oldest first
-
-                // Compute positions for the first (oldest) particle
-                const first = group[0];
-                first.pos = getParticlePos(first.p, first.t);
-
                 for (let i = 1; i < group.length; i++) {
                     const prev = group[i - 1];
                     const curr = group[i];
-
-                    // Start with base position from base t
-                    curr.pos = getParticlePos(curr.p, curr.t);
-
+                    const dx = prev.pos.x - curr.pos.x;
+                    const dy = (prev.pos.y + prev.noiseVal) - (curr.pos.y + curr.noiseVal);
+                    const dist = Math.sqrt(dx * dx + dy * dy);
                     const minDist = Math.max(prev.size, curr.size) * 0.55;
-                    let dx = prev.pos.x - curr.pos.x;
-                    let dy = (prev.pos.y + prev.noiseVal) - (curr.pos.y + curr.noiseVal);
-                    let dist = Math.sqrt(dx * dx + dy * dy);
-
-                    if (dist < minDist) {
-                        // Estimate local spline speed: how many pixels per t-unit
-                        const sampleStep = 0.02;
-                        const sampleT = Math.max(0, curr.t - sampleStep);
-                        const samplePos = getParticlePos(curr.p, sampleT);
-                        const sdx = curr.pos.x - samplePos.x;
-                        const sdy = curr.pos.y - samplePos.y;
-                        const sampleDist = Math.sqrt(sdx * sdx + sdy * sdy);
-                        const speed = sampleDist > 0 ? sampleDist / sampleStep : 500;
-
-                        // Pull curr's t back toward mouth to achieve minDist from prev
-                        const neededDeltaT = minDist / speed;
-                        curr.t = Math.max(0, prev.t - neededDeltaT);
-                        curr.pos = getParticlePos(curr.p, curr.t);
+                    if (dist > 0 && dist < minDist) {
+                        // Push curr away from prev along their connecting direction
+                        const pushAmount = minDist - dist;
+                        curr.pos.x -= (dx / dist) * pushAmount;
+                        curr.pos.y -= (dy / dist) * pushAmount;
                     }
-                }
-            }
-
-            // Apply burst-phase blending and handle any particles without pos
-            for (const rd of renderData) {
-                if (!rd.pos) rd.pos = getParticlePos(rd.p, rd.t);
-                // Burst phase: blend from burst position to spline position
-                if (rd.linearT < P.burstDuration) {
-                    const burstT = rd.linearT / P.burstDuration;
-                    const burstEased = 1 - Math.pow(1 - burstT, 2);
-                    const burstX = rd.p.startX + rd.p.burstDx * P.burstDistance * burstEased;
-                    const burstY = rd.p.startY + rd.p.burstDy * P.burstDistance * burstEased;
-                    const blend = burstT * burstT;
-                    rd.pos = {
-                        x: lerp(burstX, rd.pos.x, blend),
-                        y: lerp(burstY, rd.pos.y, blend),
-                    };
                 }
             }
 
@@ -2120,7 +2102,6 @@
                 ctx.restore();
             }
         }
-
 
         // ─── Main loop ───
         let lastFaceDetect = 0;
