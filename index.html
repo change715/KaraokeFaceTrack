@@ -2067,12 +2067,11 @@
                 const tA = Math.pow(depthT, P.depthEaseIn);
                 const depthEased = tA / (tA + Math.pow(1 - depthT, P.depthEaseOut));
                 const scale = lerp(P.depthScale, 1.0, depthEased);
-                let size = P.charSize * scale;
+                const size = P.charSize * scale;
 
-                // Auto-scale font to prevent overlap: estimate pixel distance to
-                // the adjacent character on the spline, cap font size accordingly.
-                // The next char (higher charIndex) was spawned segDuration/totalChars
-                // seconds later, so its age is younger and it's closer to the mouth.
+                // Prevent overlap: if the next character on the spline is too
+                // close, shift this character further along the spline direction
+                // to maintain minimum readable spacing (based on font size).
                 if (p.totalChars > 1 && p.segDuration > 0) {
                     const spawnGap = p.segDuration / p.totalChars;
                     const nextAge = age - spawnGap;
@@ -2082,8 +2081,12 @@
                         const nextPos = getParticlePos(p, nextT);
                         const dx = pos.x - nextPos.x, dy = (pos.y + noiseVal) - nextPos.y;
                         const dist = Math.sqrt(dx * dx + dy * dy);
-                        if (dist > 0 && dist < size * 0.85) {
-                            size = dist / 0.85;
+                        const minDist = size * 0.65;
+                        if (dist > 0 && dist < minDist) {
+                            // Push this char away from the next char along their connecting direction
+                            const pushAmount = minDist - dist;
+                            pos.x += (dx / dist) * pushAmount;
+                            pos.y += (dy / dist) * pushAmount;
                         }
                     }
                 }
