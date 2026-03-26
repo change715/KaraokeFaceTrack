@@ -1747,7 +1747,7 @@
                     isKept: cm ? cm.kept : undefined,
                     finalChar: cm ? cm.finalChar : undefined,
                     extrasBefore: cm ? cm.extrasBefore : 0,
-                    segDuration: cm ? segDuration : 0,
+                    segDuration: segDuration,
                 });
                 charSpawnIndex++;
             }
@@ -2067,7 +2067,26 @@
                 const tA = Math.pow(depthT, P.depthEaseIn);
                 const depthEased = tA / (tA + Math.pow(1 - depthT, P.depthEaseOut));
                 const scale = lerp(P.depthScale, 1.0, depthEased);
-                const size = P.charSize * scale;
+                let size = P.charSize * scale;
+
+                // Auto-scale font to prevent overlap: estimate pixel distance to
+                // the adjacent character on the spline, cap font size accordingly.
+                // The next char (higher charIndex) was spawned segDuration/totalChars
+                // seconds later, so its age is younger and it's closer to the mouth.
+                if (p.totalChars > 1 && p.segDuration > 0) {
+                    const spawnGap = p.segDuration / p.totalChars;
+                    const nextAge = age - spawnGap;
+                    if (nextAge > 0) {
+                        const nextLinearT = Math.min(nextAge / P.charLifetime, 1.0);
+                        const nextT = easeOutQuad(nextLinearT);
+                        const nextPos = getParticlePos(p, nextT);
+                        const dx = pos.x - nextPos.x, dy = (pos.y + noiseVal) - nextPos.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        if (dist > 0 && dist < size * 0.85) {
+                            size = dist / 0.85;
+                        }
+                    }
+                }
 
                 ctx.save();
                 ctx.globalAlpha = alpha;
