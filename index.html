@@ -302,7 +302,7 @@
             colorStartR:255, colorStartG:255, colorStartB:255,
             colorEndR:220, colorEndG:50, colorEndB:50,
             burstDistance:300, burstDuration:0.3, dirSensitivity:0.15, dirBiasX:0, targetNoise:60,
-            fadeStart:0.8, fadeEnd:0.97, spellTransStart:0.25, spellTransEnd:0.45, spellFadeSpeed:1, syncOffset:0,
+            fadeStart:0.8, fadeEnd:0.97, spellTransStart:0.25, spellTransEnd:0.45, spellFadeSpeed:1, syncOffset:0, mouthSyncOffset:0,
             subX:0, subY:40, subScale:1, subMaxWidth:600,
             imgScale:1, imgX:0, imgY:0, imgRotation:0,
             ksTLx:0, ksTLy:0, ksTRx:0, ksTRy:0,
@@ -395,6 +395,7 @@
                 { accordionEnd: true },
                 { accordion: 'Sync' },
                 { key: 'syncOffset',   label: 'Offset (s)',    min: -5, max: 5, step: 0.05 },
+                { key: 'mouthSyncOffset', label: 'Mouth offset (s)', min: -5, max: 5, step: 0.05 },
                 { accordionEnd: true },
                 { accordion: 'End Color (RGB)' },
                 { key: 'colorEndR',    label: 'Red',           min: 0, max: 255, step: 1 },
@@ -2129,7 +2130,7 @@
 
             if (!audio.paused) {
                 const syncTime = audio.currentTime + P.syncOffset;
-                updateLyricSpawning(syncTime);
+                updateLyricSpawning(syncTime + P.mouthSyncOffset);
                 updateSubtitle(syncTime);
             }
 
