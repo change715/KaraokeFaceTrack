@@ -995,15 +995,17 @@
                 if (phonetic && final_) {
                     charMap = [];
                     let fi = 0; // pointer into finalWord
-                    let cumulativeExtras = 0; // running count of extras before current kept char
+                    let totalExtras = 0; // cumulative count of ALL extras from start of word
                     for (let ci = 0; ci < phonetic.length; ci++) {
                         if (fi < final_.length && phonetic[ci].toLowerCase() === final_[fi].toLowerCase()) {
-                            charMap.push({ kept: true, finalChar: final_[fi], extrasBefore: cumulativeExtras });
+                            // extrasBefore is CUMULATIVE — total extras from start of word
+                            // This ensures all kept chars after a gap get the same minimum
+                            // boost, maintaining their relative spacing
+                            charMap.push({ kept: true, finalChar: final_[fi], extrasBefore: totalExtras });
                             fi++;
-                            cumulativeExtras = 0;
                         } else {
                             charMap.push({ kept: false, finalChar: null, extrasBefore: 0 });
-                            cumulativeExtras++;
+                            totalExtras++;
                         }
                     }
                 }
@@ -1745,6 +1747,7 @@
                     isKept: cm ? cm.kept : undefined,
                     finalChar: cm ? cm.finalChar : undefined,
                     extrasBefore: cm ? cm.extrasBefore : 0,
+                    segDuration: cm ? segDuration : 0,
                 });
                 charSpawnIndex++;
             }
@@ -2000,9 +2003,12 @@
                 }
 
                 // For "kept" particles: boost age so they speed up and close gaps
-                // left by disappearing extra chars
+                // left by disappearing extra chars. extrasBefore is CUMULATIVE
+                // (total extras from word start), so consecutive kept chars after
+                // the same gap all get the same boost, preserving their spacing.
+                // Uses segDuration (actual spawn distribution time) for correct scaling.
                 if (p.isKept && spellTransProgress > 0 && p.extrasBefore > 0) {
-                    const ageBoost = spellTransProgress * (p.extrasBefore / p.totalChars) * P.charLifetime;
+                    const ageBoost = spellTransProgress * (p.extrasBefore / p.totalChars) * p.segDuration;
                     const boostedAge = age + ageBoost;
                     linearT = Math.min(boostedAge / P.charLifetime, 1.0);
                     t = easeOutQuad(linearT);
