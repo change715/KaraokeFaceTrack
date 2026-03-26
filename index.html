@@ -2042,6 +2042,10 @@
                 if (p.isKept && spellTransProgress > 0 && p.extrasBefore > 0) {
                     const ageBoost = spellTransProgress * (p.extrasBefore / p.totalChars) * p.segDuration;
                     linearT = Math.min((age * fontSpeedScale + ageBoost) / P.charLifetime, 1.0);
+                    // Cap position during transition so kept chars don't overshoot into fade zone
+                    if (spellTransProgress < 1 && linearT > P.fadeStart) {
+                        linearT = P.fadeStart;
+                    }
                     t = easeOutQuad(linearT);
                 }
 
@@ -2075,7 +2079,8 @@
                 }
                 // Fade based on eased spline position — chars disappear before
                 // they pile up at the endpoint
-                if (t > P.fadeStart) {
+                const inSpellTransition = p.isKept !== undefined && spellTransProgress < 1;
+                if (t > P.fadeStart && !inSpellTransition) {
                     alpha *= 1.0 - (t - P.fadeStart) / (P.fadeEnd - P.fadeStart);
                 }
 
