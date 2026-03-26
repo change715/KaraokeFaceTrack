@@ -1743,6 +1743,7 @@
                     burstDy: Math.sin(burstAngle),
                     charIndex: charSpawnIndex,
                     totalChars: text.length,
+                    segIndex: currentSegIdx,
                     // Spelling transition data (null if no phoneticWord/finalWord)
                     isKept: cm ? cm.kept : undefined,
                     finalChar: cm ? cm.finalChar : undefined,
@@ -1986,46 +1987,37 @@
             const nowSec = nowMs / 1000;
             particles = particles.filter(p => (nowSec - p.spawnTime) < P.charLifetime);
 
+            // ── Pass 1: compute position, alpha, color, size for each particle ──
+            const renderData = [];
             for (const p of particles) {
                 const age = nowSec - p.spawnTime;
                 let linearT = Math.min(age / P.charLifetime, 1.0);
-
-                // Ease-out: particles shoot forward from the mouth quickly,
-                // then slow down and spread out — making words readable at the far end
                 let t = easeOutQuad(linearT);
 
-                // ─── Spelling transition: phonetic → finalWord ───
-                // Compute transition progress (0→1) over the configured spline t window
+                // Spelling transition progress
                 let spellTransProgress = 0;
                 if (p.isKept !== undefined) {
                     spellTransProgress = Math.max(0, Math.min(1,
                         (t - P.spellTransStart) / (P.spellTransEnd - P.spellTransStart)));
                 }
 
-                // For "kept" particles: boost age so they speed up and close gaps
-                // left by disappearing extra chars. extrasBefore is CUMULATIVE
-                // (total extras from word start), so consecutive kept chars after
-                // the same gap all get the same boost, preserving their spacing.
-                // Uses segDuration (actual spawn distribution time) for correct scaling.
+                // Kept particles: boost age to close gaps from disappeared extras
                 if (p.isKept && spellTransProgress > 0 && p.extrasBefore > 0) {
                     const ageBoost = spellTransProgress * (p.extrasBefore / p.totalChars) * p.segDuration;
-                    const boostedAge = age + ageBoost;
-                    linearT = Math.min(boostedAge / P.charLifetime, 1.0);
+                    linearT = Math.min((age + ageBoost) / P.charLifetime, 1.0);
                     t = easeOutQuad(linearT);
                 }
 
                 const splinePos = getParticlePos(p, t);
 
-                // Burst phase: for the first ~8% of life, shoot outward from the mouth
-                // then smoothly blend into the spline path
+                // Burst phase
                 let pos;
                 if (linearT < P.burstDuration) {
-                    const burstT = linearT / P.burstDuration; // 0→1 during burst
-                    const burstEased = 1 - Math.pow(1 - burstT, 2); // ease-out
+                    const burstT = linearT / P.burstDuration;
+                    const burstEased = 1 - Math.pow(1 - burstT, 2);
                     const burstX = p.startX + p.burstDx * P.burstDistance * burstEased;
                     const burstY = p.startY + p.burstDy * P.burstDistance * burstEased;
-                    // Blend from burst position to spline position
-                    const blend = burstT * burstT; // ease-in blend toward spline
+                    const blend = burstT * burstT;
                     pos = {
                         x: lerp(burstX, splinePos.x, blend),
                         y: lerp(burstY, splinePos.y, blend),
@@ -2034,74 +2026,79 @@
                     pos = splinePos;
                 }
 
-                // Noise: perpendicular wobble
                 const noiseVal = noise(age * P.noiseFreq, p.seed) * P.noiseAmp;
 
-                // Opacity: fade in, then fade out well before reaching spline end
+                // Alpha
                 let alpha = 1.0;
                 if (t < P.fadeInEnd) {
                     alpha = t <= P.fadeInStart ? 0 : (t - P.fadeInStart) / (P.fadeInEnd - P.fadeInStart);
                 }
-                // Fade based on eased spline position — chars disappear before
-                // they pile up at the endpoint
                 if (t > P.fadeStart) {
                     alpha *= 1.0 - (t - P.fadeStart) / (P.fadeEnd - P.fadeStart);
                 }
-
-                // Spelling transition: fade out extra (non-kept) chars
                 if (p.isKept === false && spellTransProgress > 0) {
                     alpha *= (1.0 - spellTransProgress);
                 }
-
                 alpha = Math.max(0, Math.min(1, alpha));
                 if (alpha <= 0) continue;
 
-                // Color: continuous gradient from start → end over lifetime
+                // Color
                 const r = Math.round(lerp(P.colorStartR, P.colorEndR, linearT));
                 const g = Math.round(lerp(P.colorStartG, P.colorEndG, linearT));
                 const b = Math.round(lerp(P.colorStartB, P.colorEndB, linearT));
 
-                // Depth scale: characters start small (far from camera) and grow
-                // to full size by depthFullAt, staying full size after
+                // Depth scale
                 const depthT = Math.min(t / P.depthFullAt, 1.0);
                 const tA = Math.pow(depthT, P.depthEaseIn);
                 const depthEased = tA / (tA + Math.pow(1 - depthT, P.depthEaseOut));
                 const scale = lerp(P.depthScale, 1.0, depthEased);
                 const size = P.charSize * scale;
 
-                // Prevent overlap: if the next character on the spline is too
-                // close, shift this character further along the spline direction
-                // to maintain minimum readable spacing (based on font size).
-                if (p.totalChars > 1 && p.segDuration > 0) {
-                    const spawnGap = p.segDuration / p.totalChars;
-                    const nextAge = age - spawnGap;
-                    if (nextAge > 0) {
-                        const nextLinearT = Math.min(nextAge / P.charLifetime, 1.0);
-                        const nextT = easeOutQuad(nextLinearT);
-                        const nextPos = getParticlePos(p, nextT);
-                        const dx = pos.x - nextPos.x, dy = (pos.y + noiseVal) - nextPos.y;
-                        const dist = Math.sqrt(dx * dx + dy * dy);
-                        const minDist = size * 0.65;
-                        if (dist > 0 && dist < minDist) {
-                            // Push this char away from the next char along their connecting direction
-                            const pushAmount = minDist - dist;
-                            pos.x += (dx / dist) * pushAmount;
-                            pos.y += (dy / dist) * pushAmount;
-                        }
+                const displayChar = (p.isKept && p.finalChar && spellTransProgress >= 1) ? p.finalChar : p.char;
+
+                renderData.push({
+                    p, pos, noiseVal, alpha, r, g, b, size, displayChar,
+                    segIndex: p.segIndex, charIndex: p.charIndex,
+                });
+            }
+
+            // ── Pass 2: cascade minimum spacing per segment ──
+            // Group by segment, sort oldest-first (lowest charIndex = spawned first
+            // = furthest along spline), then walk forward enforcing min distance.
+            const segGroups = new Map();
+            for (const rd of renderData) {
+                if (!segGroups.has(rd.segIndex)) segGroups.set(rd.segIndex, []);
+                segGroups.get(rd.segIndex).push(rd);
+            }
+            for (const group of segGroups.values()) {
+                group.sort((a, b) => a.charIndex - b.charIndex); // oldest first
+                for (let i = 1; i < group.length; i++) {
+                    const prev = group[i - 1];
+                    const curr = group[i];
+                    const dx = prev.pos.x - curr.pos.x;
+                    const dy = (prev.pos.y + prev.noiseVal) - (curr.pos.y + curr.noiseVal);
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    const minDist = Math.max(prev.size, curr.size) * 0.55;
+                    if (dist > 0 && dist < minDist) {
+                        // Push curr away from prev along their connecting direction
+                        const pushAmount = minDist - dist;
+                        curr.pos.x -= (dx / dist) * pushAmount;
+                        curr.pos.y -= (dy / dist) * pushAmount;
                     }
                 }
+            }
 
+            // ── Pass 3: render ──
+            for (const rd of renderData) {
                 ctx.save();
-                ctx.globalAlpha = alpha;
-                ctx.font = `bold ${size}px 'Helvetica Neue', Arial, sans-serif`;
-                ctx.fillStyle = `rgb(${r},${g},${b})`;
+                ctx.globalAlpha = rd.alpha;
+                ctx.font = `bold ${rd.size}px 'Helvetica Neue', Arial, sans-serif`;
+                ctx.fillStyle = `rgb(${rd.r},${rd.g},${rd.b})`;
                 ctx.shadowColor = 'rgba(0,0,0,0.7)';
                 ctx.shadowBlur = 4;
                 ctx.shadowOffsetX = 1;
                 ctx.shadowOffsetY = 1;
-                // Use finalChar once spelling transition is complete
-                const displayChar = (p.isKept && p.finalChar && spellTransProgress >= 1) ? p.finalChar : p.char;
-                ctx.fillText(displayChar, pos.x, pos.y + noiseVal);
+                ctx.fillText(rd.displayChar, rd.pos.x, rd.pos.y + rd.noiseVal);
                 ctx.restore();
             }
         }
