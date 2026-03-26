@@ -302,7 +302,7 @@
             colorStartR:255, colorStartG:255, colorStartB:255,
             colorEndR:220, colorEndG:50, colorEndB:50,
             burstDistance:300, burstDuration:0.3, dirSensitivity:0.15, dirBiasX:0, targetNoise:60,
-            fadeStart:0.8, fadeEnd:0.97, spellTransStart:0.25, spellTransEnd:0.45, syncOffset:0,
+            fadeStart:0.8, fadeEnd:0.97, spellTransStart:0.25, spellTransEnd:0.45, spellFadeSpeed:1, syncOffset:0,
             subX:0, subY:40, subScale:1, subMaxWidth:600,
             imgScale:1, imgX:0, imgY:0, imgRotation:0,
             ksTLx:0, ksTLy:0, ksTRx:0, ksTRy:0,
@@ -366,6 +366,7 @@
                 { accordion: 'Spelling Transition' },
                 { key: 'spellTransStart', label: 'Trans start (t)', min: 0.05, max: 0.8, step: 0.01 },
                 { key: 'spellTransEnd',   label: 'Trans end (t)',   min: 0.1,  max: 0.9, step: 0.01 },
+                { key: 'spellFadeSpeed',  label: 'Extra fade speed', min: 0.2, max: 5.0, step: 0.1 },
                 { accordionEnd: true },
                 { accordion: 'Burst' },
                 { key: 'burstDistance', label: 'Burst dist (px)', min: 10, max: 600, step: 5 },
@@ -2050,7 +2051,7 @@
 
                 // Spelling transition: fade out extra (non-kept) chars
                 if (p.isKept === false && spellTransProgress > 0) {
-                    alpha *= (1.0 - spellTransProgress);
+                    alpha *= Math.pow(1.0 - spellTransProgress, P.spellFadeSpeed);
                 }
 
                 alpha = Math.max(0, Math.min(1, alpha));
