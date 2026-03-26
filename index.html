@@ -2097,6 +2097,11 @@
                     }
                 }
 
+                // Spelling transition: scale down extra (non-kept) chars as they fade
+                if (p.isKept === false && spellTransProgress > 0) {
+                    size *= Math.pow(1.0 - spellTransProgress, P.spellFadeSpeed);
+                }
+
                 ctx.save();
                 ctx.globalAlpha = alpha;
                 ctx.font = `bold ${size}px 'Helvetica Neue', Arial, sans-serif`;
