@@ -2028,10 +2028,29 @@
                 // Font-scaled t — used for positioning (spreads chars apart)
                 // Word grouping: later chars get an age boost so the word
                 // travels as a cohesive group instead of spreading across the spline.
-                const groupBoost = (p.charIndex / Math.max(p.totalChars - 1, 1))
+                const maxIdx = Math.max(p.totalChars - 1, 1);
+                const groupBoost = (p.charIndex / maxIdx)
                     * p.segDuration * P.wordGrouping;
                 let linearT = Math.min((age * fontSpeedScale + groupBoost) / P.charLifetime, 1.0);
                 let t = easeOutQuad(linearT);
+
+                // Speed cap: slow down chars that are too far ahead of the
+                // char behind them (higher charIndex = younger, closer to mouth).
+                // This keeps each word cohesive by limiting the max gap.
+                if (p.charIndex < p.totalChars - 1 && p.segDuration > 0) {
+                    const spawnGap = p.segDuration / p.totalChars;
+                    const behindAge = age - spawnGap;
+                    if (behindAge > 0) {
+                        const behindGroup = ((p.charIndex + 1) / maxIdx)
+                            * p.segDuration * P.wordGrouping;
+                        const behindLT = Math.min((behindAge * fontSpeedScale + behindGroup) / P.charLifetime, 1.0);
+                        const behindT = easeOutQuad(behindLT);
+                        const maxGap = (P.charSize * 0.65) / canvas.width;
+                        if (t - behindT > maxGap) {
+                            t = behindT + maxGap;
+                        }
+                    }
+                }
 
                 // ─── Spelling transition: phonetic → finalWord ───
                 // Compute from baseT so transition timing responds to the
@@ -2115,42 +2134,6 @@
                 const scale = lerp(P.depthScale, 1.0, depthEased);
                 let size = P.charSize * scale;
 
-                // Auto-scale font to prevent overlap: estimate pixel distance to
-                // adjacent characters on the spline, cap font size accordingly.
-                // Check both directions and 2 neighbors deep so all chars in a
-                // dense region detect similar spacing and scale uniformly.
-                if (p.totalChars > 1 && p.segDuration > 0) {
-                    const spawnGap = p.segDuration / p.totalChars;
-                    const maxIdx = p.totalChars - 1 || 1;
-                    let minPerCharDist = Infinity;
-
-                    for (let n = 1; n <= 2; n++) {
-                        // Behind (younger char, closer to mouth)
-                        const behindIdx = p.charIndex + n;
-                        const behindAge = age - spawnGap * n;
-                        if (behindAge > 0 && behindIdx < p.totalChars) {
-                            const bGroup = (behindIdx / maxIdx) * p.segDuration * P.wordGrouping;
-                            const bLT = Math.min((behindAge * fontSpeedScale + bGroup) / P.charLifetime, 1.0);
-                            const bPos = getParticlePos(p, easeOutQuad(bLT));
-                            const dx = pos.x - bPos.x, dy = (pos.y + noiseVal) - bPos.y;
-                            minPerCharDist = Math.min(minPerCharDist, Math.sqrt(dx * dx + dy * dy) / n);
-                        }
-                        // Ahead (older char, further along spline)
-                        const aheadIdx = p.charIndex - n;
-                        const aheadAge = age + spawnGap * n;
-                        if (aheadIdx >= 0 && (aheadAge * fontSpeedScale) < P.charLifetime) {
-                            const aGroup = (aheadIdx / maxIdx) * p.segDuration * P.wordGrouping;
-                            const aLT = Math.min((aheadAge * fontSpeedScale + aGroup) / P.charLifetime, 1.0);
-                            const aPos = getParticlePos(p, easeOutQuad(aLT));
-                            const dx = pos.x - aPos.x, dy = (pos.y + noiseVal) - aPos.y;
-                            minPerCharDist = Math.min(minPerCharDist, Math.sqrt(dx * dx + dy * dy) / n);
-                        }
-                    }
-
-                    if (minPerCharDist > 0 && minPerCharDist < size * 1.1) {
-                        size = Math.max(minPerCharDist / 1.1, P.charSize * 0.3);
-                    }
-                }
 
                 // Spelling transition: scale down extra chars sequentially
                 if (p.isKept === false && spellTransProgress > 0) {
