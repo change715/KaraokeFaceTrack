@@ -302,7 +302,7 @@
             colorStartR:255, colorStartG:255, colorStartB:255,
             colorEndR:220, colorEndG:50, colorEndB:50,
             burstDistance:300, burstDuration:0.3, dirSensitivity:0.15, dirBiasX:0, targetNoise:60,
-            fadeStart:0.8, fadeEnd:0.97, spellTransStart:0.25, spellTransEnd:0.45, spellFadeSpeed:1, syncOffset:0, mouthSyncOffset:0,
+            fadeStart:0.8, fadeEnd:0.97, spellTransStart:0.25, spellTransEnd:0.45, spellFadeSpeed:1, wordGrouping:0.7, syncOffset:0, mouthSyncOffset:0,
             subX:0, subY:40, subScale:1, subMaxWidth:600,
             imgScale:1, imgX:0, imgY:0, imgRotation:0,
             ksTLx:0, ksTLy:0, ksTRx:0, ksTRy:0,
@@ -356,6 +356,7 @@
                 { key: 'depthEaseIn',  label: 'Depth ease in',  min: 0.5, max: 5.0, step: 0.1 },
                 { key: 'depthEaseOut', label: 'Depth ease out', min: 0.5, max: 5.0, step: 0.1 },
                 { key: 'charLifetime', label: 'Lifetime (s)',  min: 1,  max: 10, step: 0.1 },
+                { key: 'wordGrouping', label: 'Word grouping', min: 0, max: 1.0, step: 0.01 },
                 { key: 'noiseAmp',     label: 'Noise amp',     min: 0,  max: 30, step: 0.5 },
                 { key: 'noiseFreq',    label: 'Noise freq',    min: 0.5, max: 8, step: 0.1 },
                 { key: 'fadeInStart',  label: 'Fade-in start', min: 0, max: 0.5, step: 0.01 },
@@ -2025,7 +2026,11 @@
                 const baseT = easeOutQuad(baseLinearT);
 
                 // Font-scaled t — used for positioning (spreads chars apart)
-                let linearT = Math.min((age * fontSpeedScale) / P.charLifetime, 1.0);
+                // Word grouping: later chars get an age boost so the word
+                // travels as a cohesive group instead of spreading across the spline.
+                const groupBoost = (p.charIndex / Math.max(p.totalChars - 1, 1))
+                    * p.segDuration * P.wordGrouping;
+                let linearT = Math.min((age * fontSpeedScale + groupBoost) / P.charLifetime, 1.0);
                 let t = easeOutQuad(linearT);
 
                 // ─── Spelling transition: phonetic → finalWord ───
@@ -2041,7 +2046,7 @@
                 // Includes fontSpeedScale so the boost is consistent with the scaled positioning.
                 if (p.isKept && spellTransProgress > 0 && p.extrasBefore > 0) {
                     const ageBoost = spellTransProgress * (p.extrasBefore / p.totalChars) * p.segDuration;
-                    linearT = Math.min((age * fontSpeedScale + ageBoost) / P.charLifetime, 1.0);
+                    linearT = Math.min((age * fontSpeedScale + groupBoost + ageBoost) / P.charLifetime, 1.0);
                     // Cap position during transition so kept chars don't overshoot into fade zone
                     if (spellTransProgress < 1 && linearT > P.fadeStart) {
                         linearT = P.fadeStart;
@@ -2114,32 +2119,36 @@
                 // adjacent characters on the spline, cap font size accordingly.
                 // Check both directions and 2 neighbors deep so all chars in a
                 // dense region detect similar spacing and scale uniformly.
-                // Only apply before the midpoint — past it, chars stay at full size.
-                if (t <= 0.5 && p.totalChars > 1 && p.segDuration > 0) {
+                if (p.totalChars > 1 && p.segDuration > 0) {
                     const spawnGap = p.segDuration / p.totalChars;
+                    const maxIdx = p.totalChars - 1 || 1;
                     let minPerCharDist = Infinity;
 
                     for (let n = 1; n <= 2; n++) {
                         // Behind (younger char, closer to mouth)
+                        const behindIdx = p.charIndex + n;
                         const behindAge = age - spawnGap * n;
-                        if (behindAge > 0) {
-                            const bLT = Math.min((behindAge * fontSpeedScale) / P.charLifetime, 1.0);
+                        if (behindAge > 0 && behindIdx < p.totalChars) {
+                            const bGroup = (behindIdx / maxIdx) * p.segDuration * P.wordGrouping;
+                            const bLT = Math.min((behindAge * fontSpeedScale + bGroup) / P.charLifetime, 1.0);
                             const bPos = getParticlePos(p, easeOutQuad(bLT));
                             const dx = pos.x - bPos.x, dy = (pos.y + noiseVal) - bPos.y;
                             minPerCharDist = Math.min(minPerCharDist, Math.sqrt(dx * dx + dy * dy) / n);
                         }
                         // Ahead (older char, further along spline)
+                        const aheadIdx = p.charIndex - n;
                         const aheadAge = age + spawnGap * n;
-                        if ((aheadAge * fontSpeedScale) < P.charLifetime) {
-                            const aLT = Math.min((aheadAge * fontSpeedScale) / P.charLifetime, 1.0);
+                        if (aheadIdx >= 0 && (aheadAge * fontSpeedScale) < P.charLifetime) {
+                            const aGroup = (aheadIdx / maxIdx) * p.segDuration * P.wordGrouping;
+                            const aLT = Math.min((aheadAge * fontSpeedScale + aGroup) / P.charLifetime, 1.0);
                             const aPos = getParticlePos(p, easeOutQuad(aLT));
                             const dx = pos.x - aPos.x, dy = (pos.y + noiseVal) - aPos.y;
                             minPerCharDist = Math.min(minPerCharDist, Math.sqrt(dx * dx + dy * dy) / n);
                         }
                     }
 
-                    if (minPerCharDist > 0 && minPerCharDist < size * 0.85) {
-                        size = Math.max(minPerCharDist / 0.85, P.charSize * 0.3);
+                    if (minPerCharDist > 0 && minPerCharDist < size * 1.1) {
+                        size = Math.max(minPerCharDist / 1.1, P.charSize * 0.3);
                     }
                 }
 
