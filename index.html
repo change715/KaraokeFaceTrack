@@ -2114,7 +2114,8 @@
                 // adjacent characters on the spline, cap font size accordingly.
                 // Check both directions and 2 neighbors deep so all chars in a
                 // dense region detect similar spacing and scale uniformly.
-                if (p.totalChars > 1 && p.segDuration > 0) {
+                // Only apply before the midpoint — past it, chars stay at full size.
+                if (t <= 0.5 && p.totalChars > 1 && p.segDuration > 0) {
                     const spawnGap = p.segDuration / p.totalChars;
                     let minPerCharDist = Infinity;
 
