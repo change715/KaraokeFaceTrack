@@ -1773,6 +1773,7 @@
                     gapIndex: cm ? (cm.gapIndex || 0) : 0,
                     gapSize: cm ? (cm.gapSize || 1) : 1,
                     segDuration: segDuration,
+                    segIdx: currentSegIdx,
                 });
                 charSpawnIndex++;
             }
@@ -2012,6 +2013,11 @@
             particles = particles.filter(p => (nowSec - p.spawnTime) < P.charLifetime);
 
             const fontSpeedScale = Math.max(1, P.charSize / 80);
+            const doAutoScale = P.minCharScale < 1.0;
+
+            // Pass 1: compute render data and per-char auto-scaled sizes
+            const renderData = [];
+            const segSizes = {}; // segIdx -> { sum, count } for averaging
 
             for (const p of particles) {
                 const age = nowSec - p.spawnTime;
@@ -2022,14 +2028,12 @@
                 let linearT = Math.min((age * fontSpeedScale) / P.charLifetime, 1.0);
                 let t = easeOutQuad(linearT);
 
-                // Spelling transition progress (from baseT, font-size independent)
                 let spellTransProgress = 0;
                 if (p.isKept !== undefined) {
                     spellTransProgress = Math.max(0, Math.min(1,
                         (baseT - P.spellTransStart) / (P.spellTransEnd - P.spellTransStart)));
                 }
 
-                // Kept particles: boost to close gaps from disappeared extras
                 if (p.isKept && spellTransProgress > 0 && p.extrasBefore > 0) {
                     const ageBoost = spellTransProgress * (p.extrasBefore / p.totalChars) * p.segDuration;
                     linearT = Math.min((age * fontSpeedScale + ageBoost) / P.charLifetime, 1.0);
@@ -2039,7 +2043,6 @@
                     t = easeOutQuad(linearT);
                 }
 
-                // Position on spline
                 const splinePos = getParticlePos(p, t);
                 let pos;
                 if (linearT < P.burstDuration) {
@@ -2058,7 +2061,6 @@
 
                 const noiseVal = noise(age * P.noiseFreq, p.seed) * P.noiseAmp;
 
-                // Alpha
                 let alpha = 1.0;
                 if (t < P.fadeInEnd) {
                     alpha = t <= P.fadeInStart ? 0 : (t - P.fadeInStart) / (P.fadeInEnd - P.fadeInStart);
@@ -2076,25 +2078,23 @@
                 alpha = Math.max(0, Math.min(1, alpha));
                 if (alpha <= 0) continue;
 
-                // Color
                 const r = Math.round(lerp(P.colorStartR, P.colorEndR, linearT));
                 const g = Math.round(lerp(P.colorStartG, P.colorEndG, linearT));
                 const b = Math.round(lerp(P.colorStartB, P.colorEndB, linearT));
 
-                // Depth / size
                 const depthT = Math.min(t / P.depthFullAt, 1.0);
                 const tA = Math.pow(depthT, P.depthEaseIn);
                 const depthEased = tA / (tA + Math.pow(1 - depthT, P.depthEaseOut));
                 const scale = lerp(P.depthScale, 1.0, depthEased);
                 let size = P.charSize * scale;
 
-                // Auto-scale: check neighbors in both directions (2 deep) to prevent overlap
-                if (p.totalChars > 1 && p.segDuration > 0 && P.minCharScale < 1.0) {
+                // Auto-scale: check neighbors in both directions (2 deep)
+                let autoScaledSize = size;
+                if (doAutoScale && p.totalChars > 1 && p.segDuration > 0) {
                     const spawnGap = p.segDuration / p.totalChars;
                     let minPerCharDist = Infinity;
 
                     for (let n = 1; n <= 2; n++) {
-                        // Behind (younger char, closer to mouth)
                         const behindAge = age - spawnGap * n;
                         if (behindAge > 0) {
                             const bLT = Math.min((behindAge * fontSpeedScale) / P.charLifetime, 1.0);
@@ -2102,7 +2102,6 @@
                             const dx = pos.x - bPos.x, dy = (pos.y + noiseVal) - bPos.y;
                             minPerCharDist = Math.min(minPerCharDist, Math.sqrt(dx * dx + dy * dy) / n);
                         }
-                        // Ahead (older char, further along spline)
                         const aheadAge = age + spawnGap * n;
                         if ((aheadAge * fontSpeedScale) < P.charLifetime) {
                             const aLT = Math.min((aheadAge * fontSpeedScale) / P.charLifetime, 1.0);
@@ -2113,29 +2112,49 @@
                     }
 
                     if (minPerCharDist > 0 && minPerCharDist < size * 0.85) {
-                        size = Math.max(minPerCharDist / 0.85, P.charSize * P.minCharScale);
+                        autoScaledSize = Math.max(minPerCharDist / 0.85, P.charSize * P.minCharScale);
                     }
+
+                    // Accumulate for per-segment average (all chars contribute)
+                    const sid = p.segIdx;
+                    if (!segSizes[sid]) segSizes[sid] = { sum: 0, count: 0 };
+                    segSizes[sid].sum += autoScaledSize;
+                    segSizes[sid].count++;
                 }
 
-                // Spelling transition: scale down extras sequentially
+                let spellShrink = 1;
                 if (p.isKept === false && spellTransProgress > 0) {
                     const fs = p.gapIndex / p.gapSize;
                     const fe = (p.gapIndex + 1) / p.gapSize;
                     const lf = Math.max(0, Math.min(1, (spellTransProgress - fs) / (fe - fs)));
-                    size *= Math.pow(1.0 - lf, P.spellFadeSpeed);
+                    spellShrink = Math.pow(1.0 - lf, P.spellFadeSpeed);
                 }
 
                 const displayChar = (p.isKept && p.finalChar && spellTransProgress >= 1) ? p.finalChar : p.char;
 
+                renderData.push({ p, pos, noiseVal, alpha, r, g, b, size, autoScaledSize, spellShrink, displayChar });
+            }
+
+            // Pass 2: render with uniform per-segment sizing (average, not min)
+            for (const d of renderData) {
+                let size = d.size;
+                if (doAutoScale && d.p.totalChars > 1 && d.p.segDuration > 0) {
+                    const seg = segSizes[d.p.segIdx];
+                    if (seg && seg.count > 0) {
+                        size = seg.sum / seg.count;
+                    }
+                }
+                size *= d.spellShrink;
+
                 ctx.save();
-                ctx.globalAlpha = alpha;
+                ctx.globalAlpha = d.alpha;
                 ctx.font = `bold ${size}px 'Helvetica Neue', Arial, sans-serif`;
-                ctx.fillStyle = `rgb(${r},${g},${b})`;
+                ctx.fillStyle = `rgb(${d.r},${d.g},${d.b})`;
                 ctx.shadowColor = 'rgba(0,0,0,0.7)';
                 ctx.shadowBlur = 4;
                 ctx.shadowOffsetX = 1;
                 ctx.shadowOffsetY = 1;
-                ctx.fillText(displayChar, pos.x, pos.y + noiseVal);
+                ctx.fillText(d.displayChar, d.pos.x, d.pos.y + d.noiseVal);
                 ctx.restore();
             }
         }
