@@ -2111,21 +2111,34 @@
                 let size = P.charSize * scale;
 
                 // Auto-scale font to prevent overlap: estimate pixel distance to
-                // the adjacent character on the spline, cap font size accordingly.
-                // The next char (higher charIndex) was spawned segDuration/totalChars
-                // seconds later, so its age is younger and it's closer to the mouth.
+                // adjacent characters on the spline, cap font size accordingly.
+                // Check both directions and 2 neighbors deep so all chars in a
+                // dense region detect similar spacing and scale uniformly.
                 if (p.totalChars > 1 && p.segDuration > 0) {
                     const spawnGap = p.segDuration / p.totalChars;
-                    const nextAge = age - spawnGap;
-                    if (nextAge > 0) {
-                        const nextLinearT = Math.min((nextAge * fontSpeedScale) / P.charLifetime, 1.0);
-                        const nextT = easeOutQuad(nextLinearT);
-                        const nextPos = getParticlePos(p, nextT);
-                        const dx = pos.x - nextPos.x, dy = (pos.y + noiseVal) - nextPos.y;
-                        const dist = Math.sqrt(dx * dx + dy * dy);
-                        if (dist > 0 && dist < size * 0.85) {
-                            size = Math.max(dist / 0.85, P.charSize * 0.3);
+                    let minPerCharDist = Infinity;
+
+                    for (let n = 1; n <= 2; n++) {
+                        // Behind (younger char, closer to mouth)
+                        const behindAge = age - spawnGap * n;
+                        if (behindAge > 0) {
+                            const bLT = Math.min((behindAge * fontSpeedScale) / P.charLifetime, 1.0);
+                            const bPos = getParticlePos(p, easeOutQuad(bLT));
+                            const dx = pos.x - bPos.x, dy = (pos.y + noiseVal) - bPos.y;
+                            minPerCharDist = Math.min(minPerCharDist, Math.sqrt(dx * dx + dy * dy) / n);
                         }
+                        // Ahead (older char, further along spline)
+                        const aheadAge = age + spawnGap * n;
+                        if ((aheadAge * fontSpeedScale) < P.charLifetime) {
+                            const aLT = Math.min((aheadAge * fontSpeedScale) / P.charLifetime, 1.0);
+                            const aPos = getParticlePos(p, easeOutQuad(aLT));
+                            const dx = pos.x - aPos.x, dy = (pos.y + noiseVal) - aPos.y;
+                            minPerCharDist = Math.min(minPerCharDist, Math.sqrt(dx * dx + dy * dy) / n);
+                        }
+                    }
+
+                    if (minPerCharDist > 0 && minPerCharDist < size * 0.85) {
+                        size = Math.max(minPerCharDist / 0.85, P.charSize * 0.3);
                     }
                 }
 
