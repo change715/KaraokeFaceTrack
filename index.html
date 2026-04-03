@@ -2043,7 +2043,7 @@
                 }
 
                 let linearT = Math.min((age * fontSpeedScale + groupBoost) / P.charLifetime, 1.0);
-                let t = easeOutQuad(linearT);
+                let t = linearT;
 
                 // Spelling transition progress (from baseT, font-size independent)
                 let spellTransProgress = 0;
@@ -2059,7 +2059,7 @@
                     if (spellTransProgress < 1 && linearT > P.fadeStart) {
                         linearT = P.fadeStart;
                     }
-                    t = easeOutQuad(linearT);
+                    t = linearT;
                 }
 
                 // Position on spline
