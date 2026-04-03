@@ -302,7 +302,7 @@
             colorStartR:255, colorStartG:255, colorStartB:255,
             colorEndR:220, colorEndG:50, colorEndB:50,
             burstDistance:300, burstDuration:0.3, dirSensitivity:0.15, dirBiasX:0, targetNoise:60,
-            fadeStart:0.8, fadeEnd:0.97, spellTransStart:0.25, spellTransEnd:0.45, spellFadeSpeed:1, wordGrouping:0.7, charKerning:1.0, spacingNormalize:0.3, syncOffset:0, mouthSyncOffset:0,
+            fadeStart:0.8, fadeEnd:0.97, spellTransStart:0.25, spellTransEnd:0.45, spellFadeSpeed:1, charKerning:1.0, syncOffset:0, mouthSyncOffset:0,
             subX:0, subY:40, subScale:1, subMaxWidth:600,
             imgScale:1, imgX:0, imgY:0, imgRotation:0,
             ksTLx:0, ksTLy:0, ksTRx:0, ksTRy:0,
@@ -356,9 +356,7 @@
                 { key: 'depthEaseIn',  label: 'Depth ease in',  min: 0.5, max: 5.0, step: 0.1 },
                 { key: 'depthEaseOut', label: 'Depth ease out', min: 0.5, max: 5.0, step: 0.1 },
                 { key: 'charLifetime', label: 'Lifetime (s)',  min: 1,  max: 10, step: 0.1 },
-                { key: 'wordGrouping', label: 'Word grouping', min: 0, max: 1.0, step: 0.01 },
-                { key: 'charKerning',      label: 'Char kerning',      min: 0.1, max: 3.0, step: 0.05 },
-                { key: 'spacingNormalize', label: 'Normalize after',  min: 0.05, max: 0.8, step: 0.01 },
+                { key: 'charKerning',  label: 'Char kerning',  min: 0.3, max: 5.0, step: 0.05 },
                 { key: 'noiseAmp',     label: 'Noise amp',     min: 0,  max: 30, step: 0.5 },
                 { key: 'noiseFreq',    label: 'Noise freq',    min: 0.5, max: 8, step: 0.1 },
                 { key: 'fadeInStart',  label: 'Fade-in start', min: 0, max: 0.5, step: 0.01 },
@@ -2013,7 +2011,8 @@
             const nowSec = nowMs / 1000;
             particles = particles.filter(p => (nowSec - p.spawnTime) < P.charLifetime);
 
-            const fontSpeedScale = Math.max(1, P.charSize / 80);
+            // charKerning scales movement speed: higher = more space between chars
+            const fontSpeedScale = Math.max(1, P.charSize / 80) * P.charKerning;
 
             for (const p of particles) {
                 const age = nowSec - p.spawnTime;
@@ -2039,22 +2038,6 @@
                         linearT = P.fadeStart;
                     }
                     t = easeOutQuad(linearT);
-                }
-
-                // Spacing normalization: after spacingNormalize point, blend
-                // toward evenly-spaced positions so chars don't bunch up.
-                // Each char targets a fixed kerning offset behind the first char.
-                if (t > P.spacingNormalize && p.totalChars > 1) {
-                    const blend = Math.min(1, (t - P.spacingNormalize) / (1.0 - P.spacingNormalize));
-                    // Estimate first char's t (charIndex=0 is oldest)
-                    const spawnGap = p.segDuration / p.totalChars;
-                    const firstAge = age + p.charIndex * spawnGap;
-                    const firstLT = Math.min((firstAge * fontSpeedScale) / P.charLifetime, 1.0);
-                    const firstT = easeOutQuad(firstLT);
-                    // Target: first char's position minus charIndex * kerning spacing
-                    const tSpacing = (P.charSize * P.charKerning * 0.55) / canvas.width;
-                    const targetT = Math.max(0, firstT - p.charIndex * tSpacing);
-                    t = lerp(t, targetT, blend);
                 }
 
                 // Position on spline
