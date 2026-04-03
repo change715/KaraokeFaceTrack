@@ -2012,20 +2012,35 @@
             particles = particles.filter(p => (nowSec - p.spawnTime) < P.charLifetime);
 
             const fontSpeedScale = Math.max(1, P.charSize / 80);
-            const minPixelDist = P.charSize * 0.55;
 
-            // ── Pass 1: compute positions, alpha, size for every particle ──
-            const rd = []; // render data
             for (const p of particles) {
                 const age = nowSec - p.spawnTime;
 
                 const baseLinearT = Math.min(age / P.charLifetime, 1.0);
                 const baseT = easeOutQuad(baseLinearT);
 
-                // Word grouping: later chars boost toward the first char
+                // Word grouping: later chars get a speed boost so the word
+                // stays more cohesive. Adaptive: limit boost so consecutive
+                // chars never compress closer than ~1 char width in linearT.
                 const maxIdx = Math.max(p.totalChars - 1, 1);
-                const groupBoost = (p.charIndex / maxIdx)
+                const rawGroupBoost = (p.charIndex / maxIdx)
                     * p.segDuration * P.wordGrouping;
+                // Minimum linearT gap between consecutive chars to prevent overlap
+                const spawnGap = p.segDuration / Math.max(p.totalChars, 1);
+                const naturalLTGap = (spawnGap * fontSpeedScale) / P.charLifetime;
+                const minLTGap = (P.charSize * 0.6) / canvas.width;
+                // Scale groupBoost down if it would compress chars below minLTGap
+                let groupBoost = rawGroupBoost;
+                if (naturalLTGap > 0 && p.totalChars > 1) {
+                    // groupBoost per adjacent char pair
+                    const boostPerChar = rawGroupBoost / maxIdx;
+                    const boostedGap = naturalLTGap - boostPerChar / P.charLifetime;
+                    if (boostedGap < minLTGap) {
+                        const maxBoostPerChar = Math.max(0, (naturalLTGap - minLTGap) * P.charLifetime);
+                        groupBoost = maxBoostPerChar * p.charIndex;
+                    }
+                }
+
                 let linearT = Math.min((age * fontSpeedScale + groupBoost) / P.charLifetime, 1.0);
                 let t = easeOutQuad(linearT);
 
@@ -2095,6 +2110,39 @@
                 const scale = lerp(P.depthScale, 1.0, depthEased);
                 let size = P.charSize * scale;
 
+                // Auto-scale: gentle safety net to prevent overlap.
+                // Check both neighbors, use higher floor (65%) so chars stay readable.
+                if (p.totalChars > 1 && p.segDuration > 0) {
+                    const sg = p.segDuration / p.totalChars;
+                    let closest = Infinity;
+                    for (let n = 1; n <= 2; n++) {
+                        // Behind (younger)
+                        const ba = age - sg * n;
+                        if (ba > 0) {
+                            const bi = p.charIndex + n;
+                            const bg = bi < p.totalChars ? (bi / maxIdx) * p.segDuration * P.wordGrouping : 0;
+                            const bgClamped = Math.min(bg, groupBoost * (bi / Math.max(p.charIndex, 1)));
+                            const blt = Math.min((ba * fontSpeedScale + bg) / P.charLifetime, 1.0);
+                            const bp = getParticlePos(p, easeOutQuad(blt));
+                            const dx = pos.x - bp.x, dy = (pos.y + noiseVal) - bp.y;
+                            closest = Math.min(closest, Math.sqrt(dx * dx + dy * dy) / n);
+                        }
+                        // Ahead (older)
+                        const aa = age + sg * n;
+                        if ((aa * fontSpeedScale) < P.charLifetime) {
+                            const ai = p.charIndex - n;
+                            const ag = ai >= 0 ? (ai / maxIdx) * p.segDuration * P.wordGrouping : 0;
+                            const alt = Math.min((aa * fontSpeedScale + ag) / P.charLifetime, 1.0);
+                            const ap = getParticlePos(p, easeOutQuad(alt));
+                            const dx = pos.x - ap.x, dy = (pos.y + noiseVal) - ap.y;
+                            closest = Math.min(closest, Math.sqrt(dx * dx + dy * dy) / n);
+                        }
+                    }
+                    if (closest > 0 && closest < size * 0.9) {
+                        size = Math.max(closest / 0.9, P.charSize * 0.65);
+                    }
+                }
+
                 // Spelling transition: scale down extras sequentially
                 if (p.isKept === false && spellTransProgress > 0) {
                     const fs = p.gapIndex / p.gapSize;
@@ -2105,65 +2153,15 @@
 
                 const displayChar = (p.isKept && p.finalChar && spellTransProgress >= 1) ? p.finalChar : p.char;
 
-                rd.push({ p, t, pos, noiseVal, alpha, r, g, b, size, displayChar });
-            }
-
-            // ── Pass 2: enforce minimum spacing within each segment ──
-            // Group particles by segment, sort by charIndex (0=oldest/furthest),
-            // then slow down any char that's too close to the one ahead of it.
-            const segGroups = new Map();
-            for (const d of rd) {
-                const key = d.p.segIndex;
-                if (!segGroups.has(key)) segGroups.set(key, []);
-                segGroups.get(key).push(d);
-            }
-            for (const group of segGroups.values()) {
-                if (group.length < 2) continue;
-                group.sort((a, b) => a.p.charIndex - b.p.charIndex);
-                // Walk from front (charIndex=0, furthest ahead) to back.
-                // Each char must be at least minPixelDist behind the one before it.
-                for (let i = 1; i < group.length; i++) {
-                    const prev = group[i - 1];
-                    const curr = group[i];
-                    const dx = prev.pos.x - curr.pos.x;
-                    const dy = (prev.pos.y + prev.noiseVal) - (curr.pos.y + curr.noiseVal);
-                    const dist = Math.sqrt(dx * dx + dy * dy);
-                    if (dist < minPixelDist) {
-                        // Move curr backward along the spline until it's far enough
-                        // Step t down in small increments
-                        let newT = curr.t;
-                        const step = 0.005;
-                        for (let s = 0; s < 40; s++) {
-                            newT -= step;
-                            if (newT <= 0) { newT = 0; break; }
-                            const np = getParticlePos(curr.p, newT);
-                            const ndx = prev.pos.x - np.x;
-                            const ndy = (prev.pos.y + prev.noiseVal) - (np.y + curr.noiseVal);
-                            if (Math.sqrt(ndx * ndx + ndy * ndy) >= minPixelDist) {
-                                curr.pos = np;
-                                curr.t = newT;
-                                break;
-                            }
-                        }
-                        if (newT <= 0) {
-                            curr.pos = getParticlePos(curr.p, 0);
-                            curr.t = 0;
-                        }
-                    }
-                }
-            }
-
-            // ── Pass 3: render ──
-            for (const d of rd) {
                 ctx.save();
-                ctx.globalAlpha = d.alpha;
-                ctx.font = `bold ${d.size}px 'Helvetica Neue', Arial, sans-serif`;
-                ctx.fillStyle = `rgb(${d.r},${d.g},${d.b})`;
+                ctx.globalAlpha = alpha;
+                ctx.font = `bold ${size}px 'Helvetica Neue', Arial, sans-serif`;
+                ctx.fillStyle = `rgb(${r},${g},${b})`;
                 ctx.shadowColor = 'rgba(0,0,0,0.7)';
                 ctx.shadowBlur = 4;
                 ctx.shadowOffsetX = 1;
                 ctx.shadowOffsetY = 1;
-                ctx.fillText(d.displayChar, d.pos.x, d.pos.y + d.noiseVal);
+                ctx.fillText(displayChar, pos.x, pos.y + noiseVal);
                 ctx.restore();
             }
         }
