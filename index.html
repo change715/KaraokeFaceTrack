@@ -2080,6 +2080,17 @@
                     t = easeBlended(linearT, P.linearBlend);
                 }
 
+                // Pull extras along with the approaching kept char
+                // Closer extras (lower gapIndex) get pulled more
+                if (p.isKept === false && p.nextKeptCharIndex > 0 && spellTransProgress > 0) {
+                    const keptAgeBoost = spellTransProgress * (p.nextKeptExtrasBefore / p.totalChars) * p.segDuration * P.spellGrouping;
+                    // Proximity: gapIndex=0 gets full pull, gapIndex=gapSize-1 gets minimal
+                    const proximity = 1 - p.gapIndex / p.gapSize;
+                    const pullBoost = keptAgeBoost * proximity * 0.8;
+                    linearT = Math.min((age * fontSpeedScale + pullBoost) / P.charLifetime, 1.0);
+                    t = easeBlended(linearT, P.linearBlend);
+                }
+
                 const splinePos = getParticlePos(p, t);
                 let pos;
                 if (linearT < P.burstDuration) {
