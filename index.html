@@ -294,15 +294,15 @@
         // ─── Tweakable params ───
         // Hardcoded fallback defaults
         const P_HARDCODED = {
-            charSize:80, depthScale:0.3, depthFullAt:0.5, depthEaseIn:1, depthEaseOut:2, charLifetime:4, noiseAmp:7, noiseFreq:2.5,
-            mouthSmooth:0.8, fadeInStart:0, fadeInEnd:0.12,
+            charSize:133, depthScale:0.10, depthFullAt:0.77, depthEaseIn:3.80, depthEaseOut:2, charLifetime:12, noiseAmp:0, noiseFreq:0.50,
+            mouthSmooth:0.8, fadeInStart:0, fadeInEnd:0.05,
             cp1Along:-0.5, cp1Perp:0.48, cp2Along:0.19, cp2Perp:0.24,
             midX:0.15, midY:0.35, midTanIn:0.3, midTanOut:0.3,
             targetX:0, targetY:0.2,
             colorStartR:255, colorStartG:255, colorStartB:255,
             colorEndR:220, colorEndG:50, colorEndB:50,
             burstDistance:300, burstDuration:0.3, dirSensitivity:0.15, dirBiasX:0, targetNoise:60,
-            fadeStart:0.8, fadeEnd:0.97, spellTransStart:0.25, spellTransEnd:0.45, spellFadeSpeed:1, minCharScale:0.65, syncOffset:0, mouthSyncOffset:0,
+            fadeStart:0.9, fadeEnd:1.0, spellTransStart:0.18, spellTransEnd:0.40, spellFadeSpeed:3.80, minCharScale:0.50, syncOffset:0, mouthSyncOffset:0,
             subX:0, subY:40, subScale:1, subMaxWidth:600,
             imgScale:1, imgX:0, imgY:0, imgRotation:0,
             ksTLx:0, ksTLy:0, ksTRx:0, ksTRy:0,
@@ -999,15 +999,19 @@
                     charMap = [];
                     let fi = 0;
                     let totalExtras = 0;
+                    let keptCount = 0;
                     for (let ci = 0; ci < phonetic.length; ci++) {
                         if (fi < final_.length && phonetic[ci].toLowerCase() === final_[fi].toLowerCase()) {
-                            charMap.push({ kept: true, finalChar: final_[fi], extrasBefore: totalExtras });
+                            charMap.push({ kept: true, finalChar: final_[fi], extrasBefore: totalExtras, keptIndex: keptCount });
+                            keptCount++;
                             fi++;
                         } else {
-                            charMap.push({ kept: false, finalChar: null, extrasBefore: 0 });
+                            charMap.push({ kept: false, finalChar: null, extrasBefore: 0, keptIndex: -1 });
                             totalExtras++;
                         }
                     }
+                    // Store totalKept on all entries
+                    for (const entry of charMap) entry.totalKept = keptCount;
                     // Second pass: for each gap of extras before a kept char,
                     // assign gapIndex (0 = closest to approaching kept) and gapSize
                     // so extras can fade sequentially as the kept char passes them.
@@ -1770,6 +1774,8 @@
                     isKept: cm ? cm.kept : undefined,
                     finalChar: cm ? cm.finalChar : undefined,
                     extrasBefore: cm ? cm.extrasBefore : 0,
+                    keptIndex: cm ? (cm.keptIndex || 0) : 0,
+                    totalKept: cm ? (cm.totalKept || 1) : 1,
                     gapIndex: cm ? (cm.gapIndex || 0) : 0,
                     gapSize: cm ? (cm.gapSize || 1) : 1,
                     segDuration: segDuration,
@@ -2035,9 +2041,20 @@
                         (baseT - P.spellTransStart) / (P.spellTransEnd - P.spellTransStart)));
                 }
 
-                if (p.isKept && spellTransProgress > 0 && p.extrasBefore > 0) {
-                    const ageBoost = spellTransProgress * (p.extrasBefore / p.totalChars) * p.segDuration;
+                if (p.isKept && spellTransProgress > 0) {
+                    // Redistribute speed: slow early chars, reduce late chars' speedup
+                    // keptPos: 0 for first kept char, 1 for last
+                    const keptPos = p.totalKept > 1 ? p.keptIndex / (p.totalKept - 1) : 0;
+                    // Total gap fraction that needs closing
+                    const totalGapFrac = (p.totalChars - p.totalKept) / p.totalChars;
+                    // Distributed boost: early chars get slight negative (slowdown),
+                    // late chars get positive but less than before
+                    // At keptPos=0: boost = -0.3 * totalGapFrac (slowdown)
+                    // At keptPos=1: boost = 0.7 * totalGapFrac (speedup, less than 1.0)
+                    const redistributed = (keptPos - 0.3) * totalGapFrac;
+                    const ageBoost = spellTransProgress * redistributed * p.segDuration;
                     linearT = Math.min((age * fontSpeedScale + ageBoost) / P.charLifetime, 1.0);
+                    linearT = Math.max(0, linearT); // prevent negative
                     if (spellTransProgress < 1 && linearT > P.fadeStart) {
                         linearT = P.fadeStart;
                     }
