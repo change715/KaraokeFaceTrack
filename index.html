@@ -1763,10 +1763,13 @@
                 const indexOffset = (charSpawnIndex / Math.max(text.length - 1, 1) - 0.5) * 0.15;
                 const burstAngle = baseAngle + indexOffset;
                 const cm = currentSeg.charMap ? currentSeg.charMap[charSpawnIndex] : null;
-                // Count spaces before this char for word-gap spacing
+                // Count spaces for word-gap spacing
+                // For phonetic→final segments, use subtitleText (final word) to avoid
+                // counting syllable-break spaces in phonetic like "Haaa lle luuuuuu jaaaah"
                 let spacesBeforeCount = 0;
-                for (let si = 0; si < charSpawnIndex; si++) {
-                    if (text[si] === ' ') spacesBeforeCount++;
+                const gapRef = currentSeg.charMap ? currentSeg.subtitleText : text;
+                for (let si = 0; si < Math.min(charSpawnIndex, gapRef.length); si++) {
+                    if (gapRef[si] === ' ') spacesBeforeCount++;
                 }
                 particles.push({
                     char: text[charSpawnIndex],
