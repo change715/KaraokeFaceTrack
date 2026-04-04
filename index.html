@@ -302,7 +302,7 @@
             colorStartR:255, colorStartG:255, colorStartB:255,
             colorEndR:220, colorEndG:50, colorEndB:50,
             burstDistance:300, burstDuration:0.3, dirSensitivity:0.15, dirBiasX:0, targetNoise:60,
-            fadeStart:0.9, fadeEnd:1.0, spellTransStart:0.18, spellTransEnd:0.40, spellFadeSpeed:3.80, minCharScale:0.50, charSpacing:0, scaleNormAt:0.5, wordGap:0.5, syncOffset:0, mouthSyncOffset:0,
+            fadeStart:0.9, fadeEnd:1.0, spellTransStart:0.18, spellTransEnd:0.40, spellFadeSpeed:3.80, spellGrouping:1.5, minCharScale:0.50, charSpacing:0, scaleNormAt:0.5, wordGap:0.5, syncOffset:0, mouthSyncOffset:0,
             subX:0, subY:40, subScale:1, subMaxWidth:600,
             imgScale:1, imgX:0, imgY:0, imgRotation:0,
             ksTLx:0, ksTLy:0, ksTRx:0, ksTRy:0,
@@ -368,6 +368,7 @@
                 { key: 'scaleNormAt', label: 'Scale norm at (t)', min: 0.05, max: 1.0, step: 0.01 },
                 { accordionEnd: true },
                 { accordion: 'Spelling Transition' },
+                { key: 'spellGrouping',   label: 'Grouping boost',   min: 0.5, max: 3.0, step: 0.1 },
                 { key: 'spellTransStart', label: 'Trans start (t)', min: 0.05, max: 0.8, step: 0.01 },
                 { key: 'spellTransEnd',   label: 'Trans end (t)',   min: 0.1,  max: 0.9, step: 0.01 },
                 { key: 'spellFadeSpeed',  label: 'Extra fade speed', min: 0.2, max: 5.0, step: 0.1 },
@@ -2056,11 +2057,7 @@
                 }
 
                 if (p.isKept && spellTransProgress > 0 && p.extrasBefore > 0) {
-                    // Boost later kept chars forward to fill gaps from removed extras
-                    // Multiply by totalChars/totalKept to compensate for easeOutQuad's
-                    // non-linear position mapping (equal time != equal distance)
-                    const compressionFactor = p.totalChars / p.totalKept;
-                    const ageBoost = spellTransProgress * (p.extrasBefore / p.totalChars) * p.segDuration * compressionFactor;
+                    const ageBoost = spellTransProgress * (p.extrasBefore / p.totalChars) * p.segDuration * P.spellGrouping;
                     linearT = Math.min((age * fontSpeedScale + ageBoost) / P.charLifetime, 1.0);
                     if (spellTransProgress < 1 && linearT > P.fadeStart) {
                         linearT = P.fadeStart;
