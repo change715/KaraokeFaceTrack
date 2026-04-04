@@ -2144,13 +2144,9 @@
                     const seg = segSizes[d.p.segIdx];
                     if (seg && seg.count > 0) {
                         const avgSize = seg.sum / seg.count;
-                        if (d.t >= P.depthFullAt) {
-                            // Past depth ramp: use uniform average
-                            size = avgSize;
-                        } else {
-                            // During depth ramp: keep natural small size, don't inflate
-                            size = Math.min(d.size, avgSize);
-                        }
+                        // Smoothly blend from natural depth-scaled size to uniform average
+                        const blend = Math.min(d.t / P.depthFullAt, 1.0);
+                        size = lerp(d.size, avgSize, blend);
                     }
                 }
                 size *= d.spellShrink;
