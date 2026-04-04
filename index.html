@@ -2041,20 +2041,9 @@
                         (baseT - P.spellTransStart) / (P.spellTransEnd - P.spellTransStart)));
                 }
 
-                if (p.isKept && spellTransProgress > 0) {
-                    // Redistribute speed: slow early chars, reduce late chars' speedup
-                    // keptPos: 0 for first kept char, 1 for last
-                    const keptPos = p.totalKept > 1 ? p.keptIndex / (p.totalKept - 1) : 0;
-                    // Total gap fraction that needs closing
-                    const totalGapFrac = (p.totalChars - p.totalKept) / p.totalChars;
-                    // Distributed boost: early chars get slight negative (slowdown),
-                    // late chars get positive but less than before
-                    // At keptPos=0: boost = -0.3 * totalGapFrac (slowdown)
-                    // At keptPos=1: boost = 0.7 * totalGapFrac (speedup, less than 1.0)
-                    const redistributed = (keptPos - 0.3) * totalGapFrac;
-                    const ageBoost = spellTransProgress * redistributed * p.segDuration;
+                if (p.isKept && spellTransProgress > 0 && p.extrasBefore > 0) {
+                    const ageBoost = spellTransProgress * (p.extrasBefore / p.totalChars) * p.segDuration;
                     linearT = Math.min((age * fontSpeedScale + ageBoost) / P.charLifetime, 1.0);
-                    linearT = Math.max(0, linearT); // prevent negative
                     if (spellTransProgress < 1 && linearT > P.fadeStart) {
                         linearT = P.fadeStart;
                     }
