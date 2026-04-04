@@ -2123,10 +2123,12 @@
                 let pos;
                 if (linearT < P.burstDuration) {
                     const burstT = linearT / P.burstDuration;
+                    // Smoothstep blend: 0→1 with zero derivative at both ends
+                    const blend = burstT * burstT * (3 - 2 * burstT);
+                    // Burst position eased along burst direction
                     const burstEased = 1 - Math.pow(1 - burstT, 2);
                     const burstX = p.startX + p.burstDx * P.burstDistance * burstEased;
                     const burstY = p.startY + p.burstDy * P.burstDistance * burstEased;
-                    const blend = burstT * burstT;
                     pos = {
                         x: lerp(burstX, splinePos.x, blend),
                         y: lerp(burstY, splinePos.y, blend),
