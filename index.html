@@ -2089,40 +2089,33 @@
                 const scale = lerp(P.depthScale, 1.0, depthEased);
                 let size = P.charSize * scale;
 
-                // Auto-scale: check neighbors in both directions (2 deep)
+                // Auto-scale: use local spline speed × easing derivative for smooth sizing
                 let autoScaledSize = size;
                 if (doAutoScale && p.totalChars > 1 && p.segDuration > 0) {
                     const spawnGap = p.segDuration / p.totalChars;
-                    let minPerCharDist = Infinity;
+                    // Local spline speed (pixels per unit t)
+                    const eps = 0.002;
+                    const tSample = Math.min(t + eps, 1.0);
+                    const posSample = getParticlePos(p, tSample);
+                    const splineSpeed = Math.sqrt(
+                        (posSample.x - splinePos.x) ** 2 + (posSample.y - splinePos.y) ** 2
+                    ) / Math.max(tSample - t, 0.0001);
 
-                    for (let n = 1; n <= 2; n++) {
-                        const behindAge = age - spawnGap * n;
-                        if (behindAge > 0) {
-                            const bLT = Math.min((behindAge * fontSpeedScale) / P.charLifetime, 1.0);
-                            const bPos = getParticlePos(p, easeOutQuad(bLT));
-                            const dx = pos.x - bPos.x, dy = (pos.y + noiseVal) - bPos.y;
-                            minPerCharDist = Math.min(minPerCharDist, Math.sqrt(dx * dx + dy * dy) / n);
-                        }
-                        const aheadAge = age + spawnGap * n;
-                        if ((aheadAge * fontSpeedScale) < P.charLifetime) {
-                            const aLT = Math.min((aheadAge * fontSpeedScale) / P.charLifetime, 1.0);
-                            const aPos = getParticlePos(p, easeOutQuad(aLT));
-                            const dx = pos.x - aPos.x, dy = (pos.y + noiseVal) - aPos.y;
-                            minPerCharDist = Math.min(minPerCharDist, Math.sqrt(dx * dx + dy * dy) / n);
-                        }
+                    // easeOutQuad derivative: d/dx[1-(1-x)^2] = 2(1-x)
+                    const easingDeriv = 2 * (1 - linearT);
+                    // t-gap between consecutive chars
+                    const linearTGap = (spawnGap * fontSpeedScale) / P.charLifetime;
+                    const expectedSpacing = splineSpeed * easingDeriv * linearTGap;
+
+                    if (expectedSpacing > 0 && expectedSpacing < size * 0.85) {
+                        autoScaledSize = Math.max(expectedSpacing / 0.85, P.charSize * P.minCharScale);
                     }
 
-                    if (minPerCharDist > 0 && minPerCharDist < size * 0.85) {
-                        autoScaledSize = Math.max(minPerCharDist / 0.85, P.charSize * P.minCharScale);
-                    }
-
-                    // Accumulate for per-segment average (only chars past depth ramp)
-                    if (t >= P.depthFullAt) {
-                        const sid = p.segIdx;
-                        if (!segSizes[sid]) segSizes[sid] = { sum: 0, count: 0 };
-                        segSizes[sid].sum += autoScaledSize;
-                        segSizes[sid].count++;
-                    }
+                    // Accumulate for per-segment average
+                    const sid = p.segIdx;
+                    if (!segSizes[sid]) segSizes[sid] = { sum: 0, count: 0 };
+                    segSizes[sid].sum += autoScaledSize;
+                    segSizes[sid].count++;
                 }
 
                 let spellShrink = 1;
