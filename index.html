@@ -991,7 +991,7 @@
                 const seg  = item.segments[0];
                 // Use phoneticWord for particles (has stretched chars like "Haaa lle luuuuuu jaaaah")
                 // Use text or finalWord for the subtitle display
-                const particleText  = (seg.phoneticWord || seg.text || seg.finalWord || '').trim();
+                const particleText  = seg.phoneticWord || seg.text || seg.finalWord || '';
                 const subtitleText  = (seg.text || seg.finalWord || '').trim();
 
                 // Build character mapping for phonetic→final spelling transition
