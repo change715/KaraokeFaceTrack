@@ -1267,11 +1267,18 @@
             return false;
         }
 
+        let blackoutMode = false;
         function drawWarpedVideo() {
             const w = dispCanvas.width, h = dispCanvas.height;
             if (!w || !h || video.readyState < 2) return;
 
             dispCtx.clearRect(0, 0, w, h);
+
+            if (blackoutMode) {
+                dispCtx.fillStyle = '#000';
+                dispCtx.fillRect(0, 0, w, h);
+                return;
+            }
 
             const vw = video.videoWidth, vh = video.videoHeight;
             const crop = coverRect(vw, vh, w, h);
@@ -2399,6 +2406,9 @@
                     dispCanvas.style.display = 'none';
                     statusEl.style.display = 'none';
                 }
+            }
+            if (e.key === 'o' || e.key === 'O') {
+                blackoutMode = !blackoutMode;
             }
             if (e.key === '2') {
                 // Restart song from the beginning
