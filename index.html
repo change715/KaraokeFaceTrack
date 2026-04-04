@@ -297,7 +297,7 @@
             charSize:170, depthScale:0.10, depthFullAt:0.77, depthEaseIn:3.80, depthEaseOut:2, charLifetime:12, noiseAmp:0, noiseFreq:0.50,
             mouthSmooth:0.8, fadeInStart:0, fadeInEnd:0.05,
             cp1Along:-0.5, cp1Perp:0.48, cp2Along:0.19, cp2Perp:0.24,
-            midX:0.15, midY:0.35, midTanIn:0.65, midTanOut:0.65,
+            midX:0.15, midY:0.35, midTanIn:0.65, midTanInAngle:0, midTanOut:0.65, midTanOutAngle:0,
             targetX:0, targetY:0.2,
             colorStartR:255, colorStartG:255, colorStartB:255,
             colorEndR:220, colorEndG:50, colorEndB:50,
@@ -385,8 +385,10 @@
                 { key: 'cp2Perp',      label: 'CP2 perp',      min: -1.0, max: 1.0, step: 0.01 },
                 { key: 'midX',         label: 'Mid X %',       min: 0, max: 1.0, step: 0.01 },
                 { key: 'midY',         label: 'Mid Y %',       min: 0, max: 1.0, step: 0.01 },
-                { key: 'midTanIn',  label: 'Mid tan in',  min: 0, max: 1.0, step: 0.01 },
-                { key: 'midTanOut', label: 'Mid tan out', min: 0, max: 1.0, step: 0.01 },
+                { key: 'midTanIn',       label: 'Mid tan in',       min: 0, max: 1.5, step: 0.01 },
+                { key: 'midTanInAngle',  label: 'Mid tan in angle', min: -90, max: 90, step: 1 },
+                { key: 'midTanOut',      label: 'Mid tan out',      min: 0, max: 1.5, step: 0.01 },
+                { key: 'midTanOutAngle', label: 'Mid tan out angle',min: -90, max: 90, step: 1 },
                 { key: 'targetX',      label: 'Target X %',    min: 0, max: 0.4, step: 0.01 },
                 { key: 'targetY',      label: 'Target Y %',    min: 0, max: 0.4, step: 0.01 },
                 { key: 'targetNoise',  label: 'End noise',     min: 0, max: 60, step: 1 },
@@ -1723,10 +1725,19 @@
             const tanUx = tanRawX / tanRawLen, tanUy = tanRawY / tanRawLen;
             const handleLenIn  = len1 * P.midTanIn;
             const handleLenOut = len2 * P.midTanOut;
-            const midBeforeX = mx - tanUx * handleLenIn;
-            const midBeforeY = my - tanUy * handleLenIn;
-            const midAfterX  = mx + tanUx * handleLenOut;
-            const midAfterY  = my + tanUy * handleLenOut;
+            // Rotate tangent by angle offsets (degrees → radians)
+            const inRad = P.midTanInAngle * Math.PI / 180;
+            const cosIn = Math.cos(inRad), sinIn = Math.sin(inRad);
+            const inDirX = tanUx * cosIn - tanUy * sinIn;
+            const inDirY = tanUx * sinIn + tanUy * cosIn;
+            const outRad = P.midTanOutAngle * Math.PI / 180;
+            const cosOut = Math.cos(outRad), sinOut = Math.sin(outRad);
+            const outDirX = tanUx * cosOut - tanUy * sinOut;
+            const outDirY = tanUx * sinOut + tanUy * cosOut;
+            const midBeforeX = mx - inDirX * handleLenIn;
+            const midBeforeY = my - inDirY * handleLenIn;
+            const midAfterX  = mx + outDirX * handleLenOut;
+            const midAfterY  = my + outDirY * handleLenOut;
 
             if (t <= 0.5) {
                 const lt = t * 2;
@@ -2030,10 +2041,18 @@
                     const tanUx = tanRawX / tanRawLen, tanUy = tanRawY / tanRawLen;
                     const handleLenIn  = len1 * P.midTanIn;
                     const handleLenOut = len2 * P.midTanOut;
-                    const midBeforeX = mx - tanUx * handleLenIn;
-                    const midBeforeY = my - tanUy * handleLenIn;
-                    const midAfterX  = mx + tanUx * handleLenOut;
-                    const midAfterY  = my + tanUy * handleLenOut;
+                    const inRad = P.midTanInAngle * Math.PI / 180;
+                    const cosIn = Math.cos(inRad), sinIn = Math.sin(inRad);
+                    const inDirX = tanUx * cosIn - tanUy * sinIn;
+                    const inDirY = tanUx * sinIn + tanUy * cosIn;
+                    const outRad = P.midTanOutAngle * Math.PI / 180;
+                    const cosOut = Math.cos(outRad), sinOut = Math.sin(outRad);
+                    const outDirX = tanUx * cosOut - tanUy * sinOut;
+                    const outDirY = tanUx * sinOut + tanUy * cosOut;
+                    const midBeforeX = mx - inDirX * handleLenIn;
+                    const midBeforeY = my - inDirY * handleLenIn;
+                    const midAfterX  = mx + outDirX * handleLenOut;
+                    const midAfterY  = my + outDirY * handleLenOut;
 
                     // Tangent lines
                     ctx.setLineDash([4, 4]);
