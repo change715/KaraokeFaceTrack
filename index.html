@@ -2008,6 +2008,7 @@
         }
 
         // ─── Render particles ───
+        const segAvgSmoothed = {}; // persistent smoothed avg size per segment
         function renderParticles(nowMs) {
             const nowSec = nowMs / 1000;
             particles = particles.filter(p => (nowSec - p.spawnTime) < P.charLifetime);
@@ -2137,13 +2138,27 @@
                 renderData.push({ p, pos, noiseVal, alpha, r, g, b, size, autoScaledSize, spellShrink, displayChar, t });
             }
 
-            // Pass 2: render with uniform per-segment sizing (average, not min)
+            // Smooth the per-segment averages over time to prevent jumps
+            for (const sid in segSizes) {
+                const rawAvg = segSizes[sid].sum / segSizes[sid].count;
+                if (segAvgSmoothed[sid] === undefined) {
+                    segAvgSmoothed[sid] = rawAvg;
+                } else {
+                    segAvgSmoothed[sid] = lerp(segAvgSmoothed[sid], rawAvg, 0.08);
+                }
+            }
+            // Clean up segments no longer visible
+            for (const sid in segAvgSmoothed) {
+                if (!segSizes[sid]) delete segAvgSmoothed[sid];
+            }
+
+            // Pass 2: render with uniform per-segment sizing
             for (const d of renderData) {
                 let size = d.size;
                 if (doAutoScale && d.p.totalChars > 1 && d.p.segDuration > 0) {
-                    const seg = segSizes[d.p.segIdx];
-                    if (seg && seg.count > 0) {
-                        const avgSize = seg.sum / seg.count;
+                    const sid = d.p.segIdx;
+                    if (segAvgSmoothed[sid] !== undefined) {
+                        const avgSize = segAvgSmoothed[sid];
                         // Smoothly blend from natural depth-scaled size to uniform average
                         const blend = Math.min(d.t / P.depthFullAt, 1.0);
                         size = lerp(d.size, avgSize, blend);
