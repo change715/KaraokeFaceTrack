@@ -1038,14 +1038,21 @@
                             entry.gapSize = 1;
                         }
                     }
-                    // Third pass: for each extra, store the next kept char's info
-                    // so extras can fade when the approaching kept char passes them
+                    // Third pass: for each extra, store prev and next kept char info
                     for (let ci = 0; ci < charMap.length; ci++) {
                         if (!charMap[ci].kept) {
+                            // Next kept (approaching from behind)
                             for (let ki = ci + 1; ki < charMap.length; ki++) {
                                 if (charMap[ki].kept) {
                                     charMap[ci].nextKeptCharIndex = ki;
                                     charMap[ci].nextKeptExtrasBefore = charMap[ki].extrasBefore;
+                                    break;
+                                }
+                            }
+                            // Previous kept (ahead, speeding away)
+                            for (let ki = ci - 1; ki >= 0; ki--) {
+                                if (charMap[ki].kept) {
+                                    charMap[ci].prevKeptExtrasBefore = charMap[ki].extrasBefore;
                                     break;
                                 }
                             }
@@ -1797,6 +1804,7 @@
                     gapSize: cm ? (cm.gapSize || 1) : 1,
                     nextKeptCharIndex: cm ? (cm.nextKeptCharIndex || 0) : 0,
                     nextKeptExtrasBefore: cm ? (cm.nextKeptExtrasBefore || 0) : 0,
+                    prevKeptExtrasBefore: cm ? (cm.prevKeptExtrasBefore || 0) : 0,
                     segDuration: segDuration,
                     segIdx: currentSegIdx,
                 });
@@ -2080,14 +2088,11 @@
                     t = easeBlended(linearT, P.linearBlend);
                 }
 
-                // Pull extras along with the approaching kept char
-                // Closer extras (lower gapIndex) get pulled more
-                if (p.isKept === false && p.nextKeptCharIndex > 0 && spellTransProgress > 0) {
-                    const keptAgeBoost = spellTransProgress * (p.nextKeptExtrasBefore / p.totalChars) * p.segDuration * P.spellGrouping;
-                    // Proximity: gapIndex=0 gets full pull, gapIndex=gapSize-1 gets minimal
-                    const proximity = 1 - p.gapIndex / p.gapSize;
-                    const pullBoost = keptAgeBoost * proximity * 0.8;
-                    linearT = Math.min((age * fontSpeedScale + pullBoost) / P.charLifetime, 1.0);
+                // Pull extras along with the preceding kept char (ahead, speeding away)
+                // so they don't fall behind as the group moves forward
+                if (p.isKept === false && p.prevKeptExtrasBefore > 0 && spellTransProgress > 0) {
+                    const prevKeptBoost = spellTransProgress * (p.prevKeptExtrasBefore / p.totalChars) * p.segDuration * P.spellGrouping;
+                    linearT = Math.min((age * fontSpeedScale + prevKeptBoost) / P.charLifetime, 1.0);
                     t = easeBlended(linearT, P.linearBlend);
                 }
 
