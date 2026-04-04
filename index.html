@@ -2109,26 +2109,21 @@
                 // Compute extra fade progress (used for both alpha and size)
                 let extraFadeProgress = 0;
                 if (p.isKept === false) {
-                    // Position-based: fade when kept char passes by
-                    if (p.nextKeptCharIndex > 0) {
-                        const spawnGapSec = p.segDuration / p.totalChars;
-                        const keptAge = age - (p.nextKeptCharIndex - p.charIndex) * spawnGapSec;
-                        if (keptAge > 0) {
-                            const keptAgeBoost = (p.nextKeptExtrasBefore / p.totalChars) * p.segDuration * P.spellGrouping;
-                            const keptLinearT = Math.min((keptAge * fontSpeedScale + keptAgeBoost) / P.charLifetime, 1.0);
-                            const keptT = easeBlended(keptLinearT, P.linearBlend);
-                            const fadeWindow = 0.04;
-                            extraFadeProgress = Math.max(0, Math.min(1, (keptT - t) / fadeWindow));
-                        }
-                    }
-                    // Time-based fallback: only kicks in during latter half of transition
-                    // to give position-based approach priority
-                    if (spellTransProgress > 0.5) {
-                        const lateProgress = (spellTransProgress - 0.5) * 2; // 0→1 over second half
+                    // Sequential fade: extras closer to the kept char (gapIndex=0) fade first.
+                    // Only begins once the approaching kept char has been spawned.
+                    const spawnGapSec = p.segDuration / p.totalChars;
+                    const keptSpawned = p.nextKeptCharIndex > 0 &&
+                        (age - (p.nextKeptCharIndex - p.charIndex) * spawnGapSec) > 0;
+
+                    if (keptSpawned && spellTransProgress > 0) {
+                        // gapIndex 0 = closest to kept (fades first)
+                        // gapIndex gapSize-1 = farthest (fades last)
                         const fs = p.gapIndex / p.gapSize;
                         const fe = (p.gapIndex + 1) / p.gapSize;
-                        const timeFade = Math.max(0, Math.min(1, (lateProgress - fs) / (fe - fs)));
-                        extraFadeProgress = Math.max(extraFadeProgress, timeFade);
+                        extraFadeProgress = Math.max(0, Math.min(1, (spellTransProgress - fs) / (fe - fs)));
+                    } else if (!p.nextKeptCharIndex && spellTransProgress > 0.5) {
+                        // Trailing extras (no next kept char): fade in second half
+                        extraFadeProgress = (spellTransProgress - 0.5) * 2;
                     }
                     alpha *= Math.pow(1.0 - extraFadeProgress, P.spellFadeSpeed);
                 }
