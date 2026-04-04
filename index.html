@@ -2056,7 +2056,11 @@
                 }
 
                 if (p.isKept && spellTransProgress > 0 && p.extrasBefore > 0) {
-                    const ageBoost = spellTransProgress * (p.extrasBefore / p.totalChars) * p.segDuration;
+                    // Boost later kept chars forward to fill gaps from removed extras
+                    // Multiply by totalChars/totalKept to compensate for easeOutQuad's
+                    // non-linear position mapping (equal time != equal distance)
+                    const compressionFactor = p.totalChars / p.totalKept;
+                    const ageBoost = spellTransProgress * (p.extrasBefore / p.totalChars) * p.segDuration * compressionFactor;
                     linearT = Math.min((age * fontSpeedScale + ageBoost) / P.charLifetime, 1.0);
                     if (spellTransProgress < 1 && linearT > P.fadeStart) {
                         linearT = P.fadeStart;
