@@ -2115,11 +2115,13 @@
                         autoScaledSize = Math.max(minPerCharDist / 0.85, P.charSize * P.minCharScale);
                     }
 
-                    // Accumulate for per-segment average (all chars contribute)
-                    const sid = p.segIdx;
-                    if (!segSizes[sid]) segSizes[sid] = { sum: 0, count: 0 };
-                    segSizes[sid].sum += autoScaledSize;
-                    segSizes[sid].count++;
+                    // Accumulate for per-segment average (only chars past depth ramp)
+                    if (t >= P.depthFullAt) {
+                        const sid = p.segIdx;
+                        if (!segSizes[sid]) segSizes[sid] = { sum: 0, count: 0 };
+                        segSizes[sid].sum += autoScaledSize;
+                        segSizes[sid].count++;
+                    }
                 }
 
                 let spellShrink = 1;
@@ -2132,7 +2134,7 @@
 
                 const displayChar = (p.isKept && p.finalChar && spellTransProgress >= 1) ? p.finalChar : p.char;
 
-                renderData.push({ p, pos, noiseVal, alpha, r, g, b, size, autoScaledSize, spellShrink, displayChar });
+                renderData.push({ p, pos, noiseVal, alpha, r, g, b, size, autoScaledSize, spellShrink, displayChar, t });
             }
 
             // Pass 2: render with uniform per-segment sizing (average, not min)
@@ -2141,7 +2143,14 @@
                 if (doAutoScale && d.p.totalChars > 1 && d.p.segDuration > 0) {
                     const seg = segSizes[d.p.segIdx];
                     if (seg && seg.count > 0) {
-                        size = seg.sum / seg.count;
+                        const avgSize = seg.sum / seg.count;
+                        if (d.t >= P.depthFullAt) {
+                            // Past depth ramp: use uniform average
+                            size = avgSize;
+                        } else {
+                            // During depth ramp: keep natural small size, don't inflate
+                            size = Math.min(d.size, avgSize);
+                        }
                     }
                 }
                 size *= d.spellShrink;
