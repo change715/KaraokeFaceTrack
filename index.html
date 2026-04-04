@@ -1274,12 +1274,6 @@
 
             dispCtx.clearRect(0, 0, w, h);
 
-            if (blackoutMode) {
-                dispCtx.fillStyle = '#000';
-                dispCtx.fillRect(0, 0, w, h);
-                return;
-            }
-
             const vw = video.videoWidth, vh = video.videoHeight;
             const crop = coverRect(vw, vh, w, h);
 
@@ -2279,6 +2273,12 @@
             if (timestamp - lastFaceDetect > FACE_DETECT_INTERVAL) {
                 detectFace(timestamp);
                 lastFaceDetect = timestamp;
+            }
+
+            // Blackout: paint over camera feed after detection has used it
+            if (blackoutMode) {
+                dispCtx.fillStyle = '#000';
+                dispCtx.fillRect(0, 0, dispCanvas.width, dispCanvas.height);
             }
 
             if (!audio.paused) {
