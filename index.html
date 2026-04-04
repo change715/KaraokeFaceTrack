@@ -25,6 +25,15 @@
             top: 0; left: 0;
             width: 100%; height: 100%;
         }
+        #webcam-display.mini-preview {
+            top: auto; right: auto;
+            bottom: 10px; left: 10px;
+            width: 240px; height: auto;
+            aspect-ratio: 16/9;
+            border: 2px solid rgba(255,255,255,0.4);
+            border-radius: 8px;
+            z-index: 100;
+        }
         #overlay {
             position: absolute;
             top: 0; left: 0;
@@ -2336,6 +2345,7 @@
         });
         function toggleCleanMode() {
             cleanMode = !cleanMode;
+            dispCanvas.classList.remove('mini-preview');
             dispCanvas.style.display = cleanMode ? 'none' : '';
             tweaksToggle.style.display = cleanMode ? 'none' : '';
             tweaksPanel.classList.remove('open');
@@ -2398,6 +2408,18 @@
                     // Keep camera feed hidden
                     dispCanvas.style.display = 'none';
                     statusEl.style.display = 'none';
+                }
+            }
+            if (e.key === 'o' || e.key === 'O') {
+                // Toggle mini camera preview in bottom-left
+                if (!cleanMode) return; // only works when camera feed is hidden (clean mode)
+                const isMini = dispCanvas.classList.contains('mini-preview');
+                if (isMini) {
+                    dispCanvas.classList.remove('mini-preview');
+                    dispCanvas.style.display = 'none';
+                } else {
+                    dispCanvas.classList.add('mini-preview');
+                    dispCanvas.style.display = '';
                 }
             }
             if (e.key === '2') {
