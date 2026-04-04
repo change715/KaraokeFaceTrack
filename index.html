@@ -1761,6 +1761,11 @@
                 const indexOffset = (charSpawnIndex / Math.max(text.length - 1, 1) - 0.5) * 0.15;
                 const burstAngle = baseAngle + indexOffset;
                 const cm = currentSeg.charMap ? currentSeg.charMap[charSpawnIndex] : null;
+                // Count spaces before this char for word-gap spacing
+                let spacesBeforeCount = 0;
+                for (let si = 0; si < charSpawnIndex; si++) {
+                    if (text[si] === ' ') spacesBeforeCount++;
+                }
                 particles.push({
                     char: text[charSpawnIndex],
                     spawnTime: now,
@@ -1771,6 +1776,7 @@
                     burstDy: Math.sin(burstAngle),
                     charIndex: charSpawnIndex,
                     totalChars: text.length,
+                    spacesBeforeCount: spacesBeforeCount,
                     // Spelling transition data (null if no phoneticWord/finalWord)
                     isKept: cm ? cm.kept : undefined,
                     finalChar: cm ? cm.finalChar : undefined,
@@ -2030,7 +2036,10 @@
             for (const p of particles) {
                 const age = nowSec - p.spawnTime;
                 // Per-char spacing offset: later chars in a word get extra age to spread out
-                const spacingAge = age + p.charIndex * P.charSpacing;
+                // Space characters count as extra width for word gaps
+                let spacingIndex = p.charIndex;
+                if (p.spacesBeforeCount) spacingIndex += p.spacesBeforeCount * 2;
+                const spacingAge = age + spacingIndex * P.charSpacing;
 
                 const baseLinearT = Math.min(age / P.charLifetime, 1.0);
                 const baseT = easeOutQuad(baseLinearT);
