@@ -2121,11 +2121,13 @@
                             extraFadeProgress = Math.max(0, Math.min(1, (keptT - t) / fadeWindow));
                         }
                     }
-                    // Time-based fallback: ensure extras always fade by end of transition
-                    if (spellTransProgress > 0) {
+                    // Time-based fallback: only kicks in during latter half of transition
+                    // to give position-based approach priority
+                    if (spellTransProgress > 0.5) {
+                        const lateProgress = (spellTransProgress - 0.5) * 2; // 0→1 over second half
                         const fs = p.gapIndex / p.gapSize;
                         const fe = (p.gapIndex + 1) / p.gapSize;
-                        const timeFade = Math.max(0, Math.min(1, (spellTransProgress - fs) / (fe - fs)));
+                        const timeFade = Math.max(0, Math.min(1, (lateProgress - fs) / (fe - fs)));
                         extraFadeProgress = Math.max(extraFadeProgress, timeFade);
                     }
                     alpha *= Math.pow(1.0 - extraFadeProgress, P.spellFadeSpeed);
