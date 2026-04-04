@@ -302,7 +302,7 @@
             colorStartR:255, colorStartG:255, colorStartB:255,
             colorEndR:220, colorEndG:50, colorEndB:50,
             burstDistance:300, burstDuration:0.3, dirSensitivity:0.15, dirBiasX:0, targetNoise:60,
-            fadeStart:0.9, fadeEnd:1.0, spellTransStart:0.18, spellTransEnd:0.40, spellFadeSpeed:3.80, minCharScale:0.50, charSpacing:0, scaleNormAt:0.5, wordGap:50, syncOffset:0, mouthSyncOffset:0,
+            fadeStart:0.9, fadeEnd:1.0, spellTransStart:0.18, spellTransEnd:0.40, spellFadeSpeed:3.80, minCharScale:0.50, charSpacing:0, scaleNormAt:0.5, wordGap:0.5, syncOffset:0, mouthSyncOffset:0,
             subX:0, subY:40, subScale:1, subMaxWidth:600,
             imgScale:1, imgX:0, imgY:0, imgRotation:0,
             ksTLx:0, ksTLy:0, ksTRx:0, ksTRy:0,
@@ -363,8 +363,8 @@
                 { key: 'fadeStart',   label: 'Fade-out start', min: 0.1, max: 0.9, step: 0.01 },
                 { key: 'fadeEnd',     label: 'Fade-out end',   min: 0.3, max: 1.0, step: 0.01 },
                 { key: 'minCharScale', label: 'Min char size %', min: 0.3, max: 1.0, step: 0.01 },
-                { key: 'charSpacing', label: 'Char spacing (px)', min: -20, max: 40, step: 1 },
-                { key: 'wordGap',    label: 'Word gap (px)',   min: 0, max: 200, step: 5 },
+                { key: 'charSpacing', label: 'Char spacing',   min: -0.5, max: 1.0, step: 0.01 },
+                { key: 'wordGap',    label: 'Word gap',       min: 0, max: 3.0, step: 0.05 },
                 { key: 'scaleNormAt', label: 'Scale norm at (t)', min: 0.05, max: 1.0, step: 0.01 },
                 { accordionEnd: true },
                 { accordion: 'Spelling Transition' },
@@ -2037,11 +2037,13 @@
 
             for (const p of particles) {
                 const age = nowSec - p.spawnTime;
+                // Per-char spacing + word gap: spaces add fixed time offset for word separation
+                const spacingAge = age + p.charIndex * P.charSpacing + p.spacesBeforeCount * P.wordGap;
 
                 const baseLinearT = Math.min(age / P.charLifetime, 1.0);
                 const baseT = easeOutQuad(baseLinearT);
 
-                let linearT = Math.min((age * fontSpeedScale) / P.charLifetime, 1.0);
+                let linearT = Math.min(Math.max(0, spacingAge * fontSpeedScale) / P.charLifetime, 1.0);
                 let t = easeOutQuad(linearT);
 
                 let spellTransProgress = 0;
@@ -2073,22 +2075,6 @@
                     };
                 } else {
                     pos = splinePos;
-                }
-
-                // Offset position along spline tangent for char spacing and word gaps
-                const spacingPx = p.charIndex * P.charSpacing + p.spacesBeforeCount * P.wordGap;
-                if (spacingPx !== 0) {
-                    const eps = 0.002;
-                    const tAhead = Math.min(t + eps, 1.0);
-                    const posAhead = getParticlePos(p, tAhead);
-                    const tdx = posAhead.x - splinePos.x;
-                    const tdy = posAhead.y - splinePos.y;
-                    const tLen = Math.sqrt(tdx * tdx + tdy * tdy);
-                    if (tLen > 0.001) {
-                        pos.x += (tdx / tLen) * spacingPx;
-                        pos.y += (tdy / tLen) * spacingPx;
-                    }
-                }
                 }
 
                 const noiseVal = noise(age * P.noiseFreq, p.seed) * P.noiseAmp;
