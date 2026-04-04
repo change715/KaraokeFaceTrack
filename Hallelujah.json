@@ -2,7 +2,7 @@
     {
         "segments": [
             {
-                "text": "Now I've heard there was a secret chord ",
+                "text": "Now I've heard there was a secret chord   ",
                 "delay": 0,
                 "startTime": "0.06.0",
                 "endTime": "0.10.0"
@@ -12,9 +12,9 @@
     {
         "segments": [
             {
-                "text": " That David played and it pleased the Lord",
+                "text": "  That David played and it pleased the Lord ",
                 "delay": 0,
-                "startTime": "0.10.0",
+                "startTime": "0.12.5",
                 "endTime": "0.14.0"
             }
         ]
@@ -22,9 +22,9 @@
     {
         "segments": [
             {
-                "text": "  But you don't really care for music do you?",
+                "text": "  But you don't really care for music do you? ",
                 "delay": 0,
-                "startTime": "0.14.0",
+                "startTime": "0.16.5",
                 "endTime": "0.20.5"
             }
         ]
@@ -32,7 +32,7 @@
     {
         "segments": [
             {
-                "text": "It goes like this",
+                "text": "It goes like this ",
                 "delay": 0,
                 "startTime": "0.23.5",
                 "endTime": "0.25.0"
@@ -43,7 +43,7 @@
     {
         "segments": [
             {
-                "text": "the forth, the fifth",
+                "text": "the forth, the fifth ",
                 "delay": 0,
                 "startTime": "0.25.6",
                 "endTime": "0.27.0"
@@ -53,7 +53,7 @@
     {
         "segments": [
             {
-                "text": "The minor fall the major lift",
+                "text": "The minor fall the major lift ",
                 "delay": 0,
                 "startTime": "0.28.0",
                 "endTime": "0.31.5"
@@ -83,7 +83,7 @@
     {
         "segments": [
             {
-                "phoneticWord": "Haaa lle luuuuuu jaaaah",
+                "phoneticWord": "Haaa lle luuuuuu jaaaah ",
                 "finalWord": "Hallelujah",
                 "delay": 0,
                 "startTime": "0.39.5",
@@ -94,7 +94,7 @@
     {
         "segments": [
             {
-                "phoneticWord": "Haaa lle luuuuuu jaaaah",
+                "phoneticWord": "Haaa lle luuuuuu jaaaah ",
                 "finalWord": "Hallelujah",
                 "delay": 0,
                 "startTime": "0.44.0",
@@ -105,7 +105,7 @@
     {
         "segments": [
             {
-                "phoneticWord": "Haaa lle luuuuuu jaaaah",
+                "phoneticWord": "Haaa lle luuuuuu jaaaah ",
                 "finalWord": "Hallelujah",
                 "delay": 0,
                 "startTime": "0.48.0",
@@ -116,7 +116,7 @@
     {
         "segments": [
             {
-                "phoneticWord": "Haaa lle luuuuuu jaaaah",
+                "phoneticWord": "Haaa lle luuuuuu jaaaah ",
                 "finalWord": "Hallelujah",
                 "delay": 0,
                 "startTime": "0.52.8",
@@ -127,7 +127,7 @@
     {
         "segments": [
             {
-                "text": "Your faith was strong but you needed proof",
+                "text": "Your faith was strong but you needed proof ",
                 "delay": 0,
                 "startTime": "1.01.8",
                 "endTime": "1.5.3"
@@ -137,7 +137,7 @@
     {
         "segments": [
             {
-                "text": "You saw her bathing on the roof",
+                "text": "You saw her bathing on the roof ",
                 "delay": 0,
                 "startTime": "1.06.0",
                 "endTime": "1.9.7 "
@@ -168,7 +168,7 @@
     {
         "segments": [
             {
-                "text": " She broke your throne and she cut your hair And from your lips she drew ",
+                "text": " She broke your throne and she cut your hair and from your lips she drew ",
                 "delay": 0,
                 "startTime": "1.23.0",
                 "endTime": "1.29.8"
@@ -178,7 +178,7 @@
     {
         "segments": [
             {
-                "text": "the Hallelujah",
+                "text": "the Hallelujah ",
                 "delay": 0,
                 "startTime": "1.30.2 ",
                 "endTime": "1.34.0 "
@@ -188,7 +188,7 @@
     {
         "segments": [
             {
-                "phoneticWord": "Haaa lle luuuuuu jaaaah",
+                "phoneticWord": "Haaa lle luuuuuu jaaaah ",
                 "finalWord": "Hallelujah",
                 "delay": 0,
                 "startTime": "1.35.0",
@@ -199,7 +199,7 @@
     {
         "segments": [
             {
-                "phoneticWord": "Haaa lle luuuuuu jaaaah",
+                "phoneticWord": "Haaa lle luuuuuu jaaaah ",
                 "finalWord": "Hallelujah",
                 "delay": 0,
                 "startTime": "1.39.1",
@@ -210,7 +210,7 @@
     {
         "segments": [
             {
-                "phoneticWord": "Haaa lle luuuuuu jaaaah",
+                "phoneticWord": "Haaa lle luuuuuu jaaaah ",
                 "finalWord": "Hallelujah",
                 "delay": 0,
                 "startTime": "1.43.3",
@@ -221,7 +221,7 @@
     {
         "segments": [
             {
-                "phoneticWord": "Haaa lle luuuuuu jaaaah",
+                "phoneticWord": "Haaa lle luuuuuu jaaaah ",
                 "finalWord": "Hallelujah",
                 "delay": 0,
                 "startTime": "1.47.5",
@@ -232,7 +232,7 @@
     {
         "segments": [
             {
-                "text": "You say I took the name in vain",
+                "text": "You say I took the name in vain ",
                 "delay": 0,
                 "startTime": "1.57.0",
                 "endTime": "2.0.0"
@@ -296,7 +296,7 @@
     {
         "segments": [
             {
-                "text": "The holly    or the broken",
+                "text": "The holly    or the broken ",
                 "delay": 0,
                 "startTime": "2.22.1",
                 "endTime": "2.24.9"
@@ -306,7 +306,7 @@
     {
         "segments": [
             {
-                "text": "Hallelujah",
+                "text": "Hallelujah ",
                 "delay": 0,
                 "startTime": "2.25.9",
                 "endTime": "2.28.5"
@@ -316,7 +316,7 @@
     {
         "segments": [
             {
-                "phoneticWord": "Haaa lle luuuuuu jaaaah",
+                "phoneticWord": "Haaa lle luuuuuu jaaaah ",
                 "finalWord": "Hallelujah",
                 "delay": 0,
                 "startTime": "2.29.3",
@@ -327,7 +327,7 @@
     {
         "segments": [
             {
-                "phoneticWord": "Haaa lle luuuuuu jaaaah",
+                "phoneticWord": "Haaa lle luuuuuu jaaaah ",
                 "finalWord": "Hallelujah",
                 "delay": 0,
                 "startTime": "2.33.8",
@@ -338,7 +338,7 @@
     {
         "segments": [
             {
-                "phoneticWord": "Haaa lle luuuuuu jaaaah",
+                "phoneticWord": "Haaa lle luuuuuu jaaaah ",
                 "finalWord": "Hallelujah",
                 "delay": 0,
                 "startTime": "2.38.0",
@@ -349,7 +349,7 @@
     {
         "segments": [
             {
-                "phoneticWord": "Haaa lle luuuuuu jaaaah",
+                "phoneticWord": "Haaa lle luuuuuu jaaaah ",
                 "finalWord": "Hallelujah",
                 "delay": 0,
                 "startTime": "2.42.3",
@@ -401,7 +401,7 @@
     {
         "segments": [
             {
-                "text": "And even though it all went wrong I'll stand before the Lord of the song With nothing on my tonge",
+                "text": "And even though it all went wrong I'll stand before the Lord of the song With nothing on my tongue ",
                 "delay": 0,
                 "startTime": "3.08.0",
                 "endTime": "3.19.0"
@@ -411,7 +411,7 @@
     {
         "segments": [
             {
-                "text": "but Hallelujah",
+                "text": "but Hallelujah ",
                 "delay": 0,
                 "startTime": "3.19.8",
                 "endTime": "3.22.8"
@@ -421,7 +421,7 @@
     {
         "segments": [
             {
-                "phoneticWord": "Haaa lle luuuuuu jaaaah",
+                "phoneticWord": "Haaa lle luuuuuu jaaaah ",
                 "finalWord": "Hallelujah",
                 "delay": 0,
                 "startTime": "3.24.0",
@@ -432,7 +432,7 @@
     {
         "segments": [
             {
-                "phoneticWord": "Haaa lle luuuuuu jaaaah",
+                "phoneticWord": "Haaa lle luuuuuu jaaaah ",
                 "finalWord": "Hallelujah",
                 "delay": 0,
                 "startTime": "3.28.7",
@@ -443,7 +443,7 @@
     {
         "segments": [
             {
-                "phoneticWord": "Haaa lle luuuuuu jaaaah",
+                "phoneticWord": "Haaa lle luuuuuu jaaaah ",
                 "finalWord": "Hallelujah",
                 "delay": 0,
                 "startTime": "3.32.3",
@@ -454,7 +454,7 @@
     {
         "segments": [
             {
-                "phoneticWord": "Haaa lle luuuuuu jaaaah",
+                "phoneticWord": "Haaa lle luuuuuu jaaaah ",
                 "finalWord": "Hallelujah",
                 "delay": 0,
                 "startTime": "3.36.9",
@@ -465,7 +465,7 @@
     {
         "segments": [
             {
-                "phoneticWord": "Haaa lle luuuuuu jaaaah",
+                "phoneticWord": "Haaa lle luuuuuu jaaaah ",
                 "finalWord": "Hallelujah",
                 "delay": 0,
                 "startTime": "3.41.3",
@@ -476,7 +476,7 @@
     {
         "segments": [
             {
-                "phoneticWord": "Haaa lle luuuuuu jaaaah",
+                "phoneticWord": "Haaa lle luuuuuu jaaaah ",
                 "finalWord": "Hallelujah",
                 "delay": 0,
                 "startTime": "3.45.3",
@@ -487,7 +487,7 @@
     {
         "segments": [
             {
-                "phoneticWord": "Haaa lle luuuuuu jaaaah",
+                "phoneticWord": "Haaa lle luuuuuu jaaaah ",
                 "finalWord": "Hallelujah",
                 "delay": 0,
                 "startTime": "3.49.3",
@@ -498,7 +498,7 @@
     {
         "segments": [
             {
-                "phoneticWord": "Haaa lle luuuuuu jaaaah",
+                "phoneticWord": "Haaa lle luuuuuu jaaaah ",
                 "finalWord": "Hallelujah",
                 "delay": 0,
                 "startTime": "3.53.3",
@@ -509,7 +509,7 @@
     {
         "segments": [
             {
-                "phoneticWord": "Haaa lle luuuuuu jaaaah",
+                "phoneticWord": "Haaa lle luuuuuu jaaaah ",
                 "finalWord": "Hallelujah",
                 "delay": 0,
                 "startTime": "3.58.3",
@@ -520,7 +520,7 @@
     {
         "segments": [
             {
-                "phoneticWord": "Haaa lle luuuuuu jaaaah",
+                "phoneticWord": "Haaa lle luuuuuu jaaaah ",
                 "finalWord": "Hallelujah",
                 "delay": 0,
                 "startTime": "4.02.3",
@@ -531,7 +531,7 @@
     {
         "segments": [
             {
-                "phoneticWord": "Haaa lle luuuuuu jaaaah",
+                "phoneticWord": "Haaa lle luuuuuu jaaaah ",
                 "finalWord": "Hallelujah",
                 "delay": 0,
                 "startTime": "4.06.3",
@@ -542,7 +542,7 @@
     {
         "segments": [
             {
-                "phoneticWord": "Haaa lle luuuuuu jaaaah",
+                "phoneticWord": "Haaa lle luuuuuu jaaaah ",
                 "finalWord": "Hallelujah",
                 "delay": 0,
                 "startTime": "4.10.3",
@@ -553,7 +553,7 @@
     {
         "segments": [
             {
-                "phoneticWord": "Haaa lle luuuuuu jaaaah",
+                "phoneticWord": "Haaa lle luuuuuu jaaaah ",
                 "finalWord": "Hallelujah",
                 "delay": 0,
                 "startTime": "4.15.3",
@@ -564,7 +564,7 @@
     {
         "segments": [
             {
-                "phoneticWord": "Haaa lle luuuuuu jaaaah",
+                "phoneticWord": "Haaa lle luuuuuu jaaaah ",
                 "finalWord": "Hallelujah",
                 "delay": 0,
                 "startTime": "4.19.3",
@@ -575,7 +575,7 @@
     {
         "segments": [
             {
-                "phoneticWord": "Haaa lle luuuuuu jaaaah",
+                "phoneticWord": "Haaa lle luuuuuu jaaaah ",
                 "finalWord": "Hallelujah",
                 "delay": 0,
                 "startTime": "4.22.3",
@@ -586,7 +586,7 @@
     {
         "segments": [
             {
-                "phoneticWord": "Haaa lle luuuuuu jaaaah",
+                "phoneticWord": "Haaa lle luuuuuu jaaaah ",
                 "finalWord": "Hallelujah",
                 "delay": 0,
                 "startTime": "4.27.3",
@@ -597,7 +597,7 @@
     {
         "segments": [
             {
-                "phoneticWord": "Haaa lle luuuuuu jaaaah",
+                "phoneticWord": "Haaa lle luuuuuu jaaaah ",
                 "finalWord": "Hallelujah",
                 "delay": 0,
                 "startTime": "4.32.3",
@@ -608,7 +608,7 @@
     {
         "segments": [
             {
-                "phoneticWord": "Haaa lle luuuuuu jaaaah",
+                "phoneticWord": "Haaa lle luuuuuu jaaaah ",
                 "finalWord": "Hallelujah",
                 "delay": 0,
                 "startTime": "4.35.3",
@@ -619,7 +619,7 @@
     {
         "segments": [
             {
-                "phoneticWord": "Haaa lle luuuuuu jaaaah",
+                "phoneticWord": "Haaa lle luuuuuu jaaaah ",
                 "finalWord": "Hallelujah",
                 "delay": 0,
                 "startTime": "4.39.3",
@@ -630,7 +630,7 @@
     {
         "segments": [
             {
-                "phoneticWord": "Haaa lle luuuuuu jaaaah",
+                "phoneticWord": "Haaa lle luuuuuu jaaaah ",
                 "finalWord": "Hallelujah",
                 "delay": 0,
                 "startTime": "4.44.3",
