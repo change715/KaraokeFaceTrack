@@ -302,7 +302,7 @@
             colorStartR:255, colorStartG:255, colorStartB:255,
             colorEndR:220, colorEndG:50, colorEndB:50,
             burstDistance:300, burstDuration:0.3, dirSensitivity:0.15, dirBiasX:0, targetNoise:60,
-            fadeStart:0.9, fadeEnd:1.0, spellTransStart:0.18, spellTransEnd:0.40, spellFadeSpeed:3.80, minCharScale:0.50, charSpacing:0, syncOffset:0, mouthSyncOffset:0,
+            fadeStart:0.9, fadeEnd:1.0, spellTransStart:0.18, spellTransEnd:0.40, spellFadeSpeed:3.80, minCharScale:0.50, charSpacing:0, scaleNormAt:0.5, syncOffset:0, mouthSyncOffset:0,
             subX:0, subY:40, subScale:1, subMaxWidth:600,
             imgScale:1, imgX:0, imgY:0, imgRotation:0,
             ksTLx:0, ksTLy:0, ksTRx:0, ksTRy:0,
@@ -364,6 +364,7 @@
                 { key: 'fadeEnd',     label: 'Fade-out end',   min: 0.3, max: 1.0, step: 0.01 },
                 { key: 'minCharScale', label: 'Min char size %', min: 0.3, max: 1.0, step: 0.01 },
                 { key: 'charSpacing', label: 'Char spacing',   min: -0.5, max: 1.0, step: 0.01 },
+                { key: 'scaleNormAt', label: 'Scale norm at (t)', min: 0.05, max: 1.0, step: 0.01 },
                 { accordionEnd: true },
                 { accordion: 'Spelling Transition' },
                 { key: 'spellTransStart', label: 'Trans start (t)', min: 0.05, max: 0.8, step: 0.01 },
@@ -2171,7 +2172,7 @@
                     if (segAvgSmoothed[sid] !== undefined) {
                         const avgSize = segAvgSmoothed[sid];
                         // Smoothly blend from natural depth-scaled size to uniform average
-                        const blend = Math.min(d.t / P.depthFullAt, 1.0);
+                        const blend = Math.min(d.t / P.scaleNormAt, 1.0);
                         size = lerp(d.size, avgSize, blend);
                     }
                 }
