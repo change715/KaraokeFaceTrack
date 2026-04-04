@@ -2384,6 +2384,22 @@
             if (e.key === '1') {
                 toggleCleanMode();
             }
+            if (e.key === 'p' || e.key === 'P') {
+                // Toggle params-only mode: show tweaks panel without camera feed
+                const isOpen = tweaksPanel.style.display !== 'none';
+                if (isOpen) {
+                    tweaksPanel.style.display = 'none';
+                    tweaksPanel.classList.remove('open');
+                    tweaksToggle.style.display = 'none';
+                } else {
+                    tweaksPanel.style.display = '';
+                    tweaksPanel.classList.add('open');
+                    tweaksToggle.style.display = '';
+                    // Keep camera feed hidden
+                    dispCanvas.style.display = 'none';
+                    statusEl.style.display = 'none';
+                }
+            }
             if (e.key === '2') {
                 // Restart song from the beginning
                 audio.currentTime = 0;
