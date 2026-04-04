@@ -1038,6 +1038,19 @@
                             entry.gapSize = 1;
                         }
                     }
+                    // Third pass: for each extra, store the next kept char's info
+                    // so extras can fade when the approaching kept char passes them
+                    for (let ci = 0; ci < charMap.length; ci++) {
+                        if (!charMap[ci].kept) {
+                            for (let ki = ci + 1; ki < charMap.length; ki++) {
+                                if (charMap[ki].kept) {
+                                    charMap[ci].nextKeptCharIndex = ki;
+                                    charMap[ci].nextKeptExtrasBefore = charMap[ki].extrasBefore;
+                                    break;
+                                }
+                            }
+                        }
+                    }
                 }
 
                 return {
@@ -1782,6 +1795,8 @@
                     totalKept: cm ? (cm.totalKept || 1) : 1,
                     gapIndex: cm ? (cm.gapIndex || 0) : 0,
                     gapSize: cm ? (cm.gapSize || 1) : 1,
+                    nextKeptCharIndex: cm ? (cm.nextKeptCharIndex || 0) : 0,
+                    nextKeptExtrasBefore: cm ? (cm.nextKeptExtrasBefore || 0) : 0,
                     segDuration: segDuration,
                     segIdx: currentSegIdx,
                 });
@@ -2091,11 +2106,19 @@
                 if (t > P.fadeStart && !inSpellTransition) {
                     alpha *= 1.0 - (t - P.fadeStart) / (P.fadeEnd - P.fadeStart);
                 }
-                if (p.isKept === false && spellTransProgress > 0) {
-                    const fs = p.gapIndex / p.gapSize;
-                    const fe = (p.gapIndex + 1) / p.gapSize;
-                    const lf = Math.max(0, Math.min(1, (spellTransProgress - fs) / (fe - fs)));
-                    alpha *= Math.pow(1.0 - lf, P.spellFadeSpeed);
+                if (p.isKept === false && p.nextKeptCharIndex > 0) {
+                    // Fade when the approaching kept char passes this extra's position
+                    const spawnGapSec = p.segDuration / p.totalChars;
+                    const keptAge = age - (p.nextKeptCharIndex - p.charIndex) * spawnGapSec;
+                    if (keptAge > 0) {
+                        const keptAgeBoost = (p.nextKeptExtrasBefore / p.totalChars) * p.segDuration * P.spellGrouping;
+                        const keptLinearT = Math.min((keptAge * fontSpeedScale + keptAgeBoost) / P.charLifetime, 1.0);
+                        const keptT = easeBlended(keptLinearT, P.linearBlend);
+                        // Fade as kept char approaches and passes: fade over a small t-window
+                        const fadeWindow = 0.03;
+                        const passProgress = Math.max(0, Math.min(1, (keptT - (t - fadeWindow)) / fadeWindow));
+                        alpha *= Math.pow(1.0 - passProgress, P.spellFadeSpeed);
+                    }
                 }
                 alpha = Math.max(0, Math.min(1, alpha));
                 if (alpha <= 0) continue;
@@ -2140,11 +2163,18 @@
                 }
 
                 let spellShrink = 1;
-                if (p.isKept === false && spellTransProgress > 0) {
-                    const fs = p.gapIndex / p.gapSize;
-                    const fe = (p.gapIndex + 1) / p.gapSize;
-                    const lf = Math.max(0, Math.min(1, (spellTransProgress - fs) / (fe - fs)));
-                    spellShrink = Math.pow(1.0 - lf, P.spellFadeSpeed);
+                if (p.isKept === false && p.nextKeptCharIndex > 0) {
+                    // Shrink when the approaching kept char passes this extra
+                    const spawnGapSec = p.segDuration / p.totalChars;
+                    const keptAge = age - (p.nextKeptCharIndex - p.charIndex) * spawnGapSec;
+                    if (keptAge > 0) {
+                        const keptAgeBoost = (p.nextKeptExtrasBefore / p.totalChars) * p.segDuration * P.spellGrouping;
+                        const keptLinearT = Math.min((keptAge * fontSpeedScale + keptAgeBoost) / P.charLifetime, 1.0);
+                        const keptT = easeBlended(keptLinearT, P.linearBlend);
+                        const fadeWindow = 0.03;
+                        const passProgress = Math.max(0, Math.min(1, (keptT - (t - fadeWindow)) / fadeWindow));
+                        spellShrink = Math.pow(1.0 - passProgress, P.spellFadeSpeed);
+                    }
                 }
 
                 const displayChar = (p.isKept && p.finalChar && spellTransProgress >= 1) ? p.finalChar : p.char;
