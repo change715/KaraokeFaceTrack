@@ -298,7 +298,7 @@
             mouthSmooth:0.8, fadeInStart:0, fadeInEnd:0.05,
             cp1Along:-0.5, cp1Perp:0.48, cp2Along:0.19, cp2Perp:0.24,
             midX:0.15, midY:0.35, midTanIn:0.65, midTanInAngle:0, midTanOut:0.65, midTanOutAngle:0, useMidpoint:1,
-            targetX:0, targetY:0.2, targetYTrack:0.35,
+            targetX:0, targetY:0.2, targetYTrack:0.35, trackGrace:2,
             colorStartR:255, colorStartG:255, colorStartB:255,
             colorEndR:220, colorEndG:50, colorEndB:50,
             burstDistance:300, burstDuration:0.12, dirSensitivity:0.15, dirBiasX:0, targetNoise:60,
@@ -398,6 +398,7 @@
                 { accordionEnd: true },
                 { accordion: 'Tracking' },
                 { key: 'mouthSmooth',  label: 'Smoothing',     min: 0, max: 0.95, step: 0.01 },
+                { key: 'trackGrace',   label: 'Track grace (s)', min: 0.5, max: 10, step: 0.5 },
                 { key: 'trackOffsetX', label: 'Offset X (px)', min: -500, max: 500, step: 1 },
                 { key: 'trackOffsetY', label: 'Offset Y (px)', min: -500, max: 500, step: 1 },
                 { accordionEnd: true },
@@ -1542,7 +1543,7 @@
         }
 
         // ─── Detect face ───
-        const FACE_LOST_GRACE = 500; // ms to keep last position after losing tracking
+        // Grace period uses tweakable param (seconds → ms)
         let lastFaceSeenTs = 0;
         let lastPoseDetectTs = -1;
 
@@ -1672,7 +1673,7 @@
                 if (tryPoseDetect(ts, timestamp)) return;
 
                 // No tracking source — grace period before giving up
-                if (hasFace && (timestamp - lastFaceSeenTs) > FACE_LOST_GRACE) {
+                if (hasFace && (timestamp - lastFaceSeenTs) > P.trackGrace * 1000) {
                     hasFace = false;
                 }
             } catch (e) { console.warn('Face detect error:', e); }
