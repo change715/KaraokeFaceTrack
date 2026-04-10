@@ -1695,25 +1695,12 @@
         function getParticlePos(p, t) {
             const W = canvas.width, H = canvas.height;
             // Target with per-particle vertical noise
-            let tx = W * P.targetX;
-            const tyBase = H * P.targetY;
+            // Target tracks face with a fixed offset — no thresholds, no jumps.
+            // Face moves right → target moves right. Face moves down → target moves down.
+            let tx = p.startX - W * 0.5;
+            let ty = p.startY - H * 0.35;
             const targetOffset = (Math.sin(p.seed * 7.13) * 0.5 + Math.sin(p.seed * 3.71) * 0.3 + Math.sin(p.seed * 11.3) * 0.2) * P.targetNoise;
-            let ty = tyBase + targetOffset;
-
-            // Ensure minimum X and Y distance between face and target
-            // independently, so head X movement only affects target X, etc.
-            const minXDist = W * 0.5;
-            const minYDist = H * 0.4;
-            const xDiff = tx - p.startX;
-            const yDiff = ty - p.startY;
-            const xDir = xDiff < 0 ? -1 : (xDiff > 0 ? 1 : -1);
-            const yDir = yDiff < 0 ? -1 : (yDiff > 0 ? 1 : -1);
-            if (Math.abs(xDiff) < minXDist) {
-                tx = p.startX + xDir * minXDist;
-            }
-            if (Math.abs(yDiff) < minYDist) {
-                ty = p.startY + yDir * minYDist;
-            }
+            ty += targetOffset;
 
             if (!P.useMidpoint) {
                 // Single cubic Bézier: start → target using cp1/cp2 relative to full span
