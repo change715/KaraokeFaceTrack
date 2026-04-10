@@ -1695,10 +1695,20 @@
         function getParticlePos(p, t) {
             const W = canvas.width, H = canvas.height;
             // Target with per-particle vertical noise
-            const tx = W * P.targetX;
+            let tx = W * P.targetX;
             const tyBase = H * P.targetY;
             const targetOffset = (Math.sin(p.seed * 7.13) * 0.5 + Math.sin(p.seed * 3.71) * 0.3 + Math.sin(p.seed * 11.3) * 0.2) * P.targetNoise;
             const ty = tyBase + targetOffset;
+
+            // When the face (start) is too close to the target, the curve
+            // compresses and letters bunch up. Push target X further away
+            // to maintain enough curve length for readable letter spacing.
+            const xDist = Math.abs(tx - p.startX);
+            const minXSpread = W * 0.3;
+            if (xDist < minXSpread) {
+                const xDir = tx <= p.startX ? -1 : 1;
+                tx = p.startX + xDir * minXSpread;
+            }
 
             if (!P.useMidpoint) {
                 // Single cubic Bézier: start → target using cp1/cp2 relative to full span
