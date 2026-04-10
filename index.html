@@ -2267,6 +2267,47 @@
                 if (!segSizes[sid]) delete segAvgSmoothed[sid];
             }
 
+            // Repulsion pass: push characters ahead along the spline if too close
+            // Group by segment, sorted by t (low t = near mouth, high t = near target)
+            const segGroupsByT = {};
+            for (const d of renderData) {
+                const sid = d.p.segIdx;
+                if (!segGroupsByT[sid]) segGroupsByT[sid] = [];
+                segGroupsByT[sid].push(d);
+            }
+            for (const sid in segGroupsByT) {
+                const group = segGroupsByT[sid];
+                group.sort((a, b) => a.t - b.t);
+                // index 0 = near mouth (low t), last = near target (high t)
+                // Walk from mouth outward: if char[i] is too close to char[i+1], push char[i+1] further
+                for (let i = 0; i < group.length - 1; i++) {
+                    const behind = group[i];
+                    const ahead = group[i + 1];
+                    const minSpacing = Math.max(behind.size, ahead.size) * 0.65;
+                    const dx = ahead.pos.x - behind.pos.x;
+                    const dy = (ahead.pos.y + ahead.noiseVal) - (behind.pos.y + behind.noiseVal);
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < minSpacing && dist >= 0) {
+                        // Need to push ahead char further along the spline
+                        const deficit = minSpacing - dist;
+                        // Estimate how much t-shift gives us 'deficit' pixels
+                        // Use spline speed at ahead's current t
+                        const eps = 0.002;
+                        const tSample = Math.min(ahead.t + eps, 1.0);
+                        const posSample = getParticlePos(ahead.p, tSample);
+                        const speed = Math.sqrt(
+                            (posSample.x - ahead.pos.x) ** 2 + (posSample.y - ahead.pos.y) ** 2
+                        ) / Math.max(tSample - ahead.t, 0.0001);
+                        if (speed > 0) {
+                            const tShift = Math.min(deficit / speed, 1.0 - ahead.t);
+                            ahead.t = Math.min(ahead.t + tShift, 1.0);
+                            const newPos = getParticlePos(ahead.p, ahead.t);
+                            ahead.pos = newPos;
+                        }
+                    }
+                }
+            }
+
             // Pass 2: render with uniform per-segment sizing
             for (const d of renderData) {
                 let size = d.size;
