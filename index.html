@@ -2315,9 +2315,8 @@
                     for (let i = 1; i < group.length; i++) {
                         const curr = group[i];
 
-                        // Skip characters still in burst phase — their positions
-                        // are dominated by the burst animation, not the curve
-                        if (curr.linearT < P.burstDuration * 2) continue;
+                        // Skip only during actual burst animation (position is burst-dominated)
+                        if (curr.linearT < P.burstDuration) continue;
 
                         const prev = lastAdjusted;
 
@@ -2325,13 +2324,15 @@
                         let dy = curr.pos.y - prev.pos.y;
                         let dist = Math.sqrt(dx * dx + dy * dy);
 
-                        // Determine required spacing based on actual character metrics
+                        // Determine required spacing based on actual character metrics.
+                        // Use 0.7× sum of half-widths to handle diagonal paths (accounts
+                        // for up to ~45° angles where cos(45°)≈0.71).
                         const isWordBoundary = prev.displayChar === ' ' || curr.displayChar === ' ';
-                        const letterGap = curr._sz * 0.05;
-                        const wordGap = curr._sz * 0.35;
+                        const letterGap = curr._sz * 0.08;
+                        const wordGap = curr._sz * 0.4;
                         const gap = isWordBoundary ? wordGap : letterGap;
-                        const minDist = (prev._cw + curr._cw) * 0.5 + gap;
-                        const maxDist = minDist * 2.5;
+                        const minDist = (prev._cw + curr._cw) * 0.7 + gap;
+                        const maxDist = minDist * 2.0;
 
                         if (dist < 0.5) {
                             // Characters at essentially the same point —
@@ -2386,6 +2387,7 @@
                 ctx.save();
                 ctx.globalAlpha = d.alpha;
                 ctx.font = `bold ${size}px 'Helvetica Neue', Arial, sans-serif`;
+                ctx.textAlign = 'center';
                 ctx.fillStyle = `rgb(${d.r},${d.g},${d.b})`;
                 ctx.shadowColor = 'rgba(0,0,0,0.7)';
                 ctx.shadowBlur = 4;
