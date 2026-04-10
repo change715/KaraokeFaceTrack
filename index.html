@@ -1698,7 +1698,7 @@
             // Target tracks face with a fixed offset — no thresholds, no jumps.
             // Face moves right → target moves right. Face moves down → target moves down.
             let tx = p.startX - W * 0.5;
-            let ty = p.startY - H * 0.35;
+            let ty = p.startY - H * 0.35 + H * P.targetY;
             // Never let target drift right of the configured targetX
             tx = Math.min(tx, W * P.targetX);
             const targetOffset = (Math.sin(p.seed * 7.13) * 0.5 + Math.sin(p.seed * 3.71) * 0.3 + Math.sin(p.seed * 11.3) * 0.2) * P.targetNoise;
@@ -2194,7 +2194,7 @@
 
                 // Arc-length remap: uniform spacing along curve
                 if (!p._arcData) p._arcData = buildArcTable(p);
-                const posT = remapToArcLength(p._arcData, t);
+                const posT = remapToArcLength(p._arcData, Math.min(t, 1.0));
                 const splinePos = getParticlePos(p, posT);
                 let pos;
                 if (linearT < P.burstDuration) {
@@ -2269,8 +2269,11 @@
                         (posSample.x - splinePos.x) ** 2 + (posSample.y - splinePos.y) ** 2
                     ) / Math.max(eps, 0.0001);
 
-                    // easeOutQuad derivative: d/dx[1-(1-x)^2] = 2(1-x)
-                    const easingDeriv = 2 * (1 - linearT);
+                    // Correct derivative for easeBlended: easeOutQuad portion
+                    // uses 2(1-x), but after linearBlend it's constant
+                    const easingDeriv = linearT <= P.linearBlend
+                        ? 2 * (1 - linearT)
+                        : 2 * (1 - P.linearBlend);
                     // t-gap between consecutive chars
                     const linearTGap = (spawnGap * fontSpeedScale) / P.charLifetime;
                     const expectedSpacing = splineSpeed * easingDeriv * linearTGap;
