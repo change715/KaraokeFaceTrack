@@ -1778,6 +1778,39 @@
             }
         }
 
+        // ─── Arc-length reparameterization ───
+        // Builds a lookup table so that equal t-steps produce equal pixel
+        // distances along the curve, preventing letter bunching on tight bends.
+        const ARC_SAMPLES = 64;
+        function buildArcTable(p) {
+            const table = new Float64Array(ARC_SAMPLES + 1);
+            let prev = getParticlePos(p, 0);
+            let totalLen = 0;
+            table[0] = 0;
+            for (let i = 1; i <= ARC_SAMPLES; i++) {
+                const pt = getParticlePos(p, i / ARC_SAMPLES);
+                totalLen += Math.sqrt((pt.x - prev.x) ** 2 + (pt.y - prev.y) ** 2);
+                table[i] = totalLen;
+                prev = pt;
+            }
+            return { table, totalLen };
+        }
+
+        function remapToArcLength(arcData, t) {
+            const targetLen = t * arcData.totalLen;
+            const tbl = arcData.table;
+            const n = tbl.length - 1;
+            // Binary search for the segment containing targetLen
+            let lo = 0, hi = n;
+            while (lo < hi - 1) {
+                const mid = (lo + hi) >> 1;
+                if (tbl[mid] < targetLen) lo = mid; else hi = mid;
+            }
+            const segLen = tbl[hi] - tbl[lo];
+            const frac = segLen > 0 ? (targetLen - tbl[lo]) / segLen : 0;
+            return (lo + frac) / n;
+        }
+
         // ─── Spawn characters ───
         function updateLyricSpawning(currentTime) {
             let currentSeg = null, currentSegIdx = -1;
@@ -2164,7 +2197,10 @@
                     t = easeBlended(linearT, P.linearBlend);
                 }
 
-                const splinePos = getParticlePos(p, t);
+                // Arc-length remap: uniform spacing along curve
+                if (!p._arcData) p._arcData = buildArcTable(p);
+                const posT = remapToArcLength(p._arcData, t);
+                const splinePos = getParticlePos(p, posT);
                 let pos;
                 if (linearT < P.burstDuration) {
                     const burstT = linearT / P.burstDuration;
@@ -2230,13 +2266,13 @@
                 let autoScaledSize = size;
                 if (doAutoScale && p.totalChars > 1 && p.segDuration > 0) {
                     const spawnGap = p.segDuration / p.totalChars;
-                    // Local spline speed (pixels per unit t)
+                    // Local spline speed (pixels per unit t) using remapped positions
                     const eps = 0.002;
-                    const tSample = Math.min(t + eps, 1.0);
-                    const posSample = getParticlePos(p, tSample);
+                    const posTSample = remapToArcLength(p._arcData, Math.min(t + eps, 1.0));
+                    const posSample = getParticlePos(p, posTSample);
                     const splineSpeed = Math.sqrt(
                         (posSample.x - splinePos.x) ** 2 + (posSample.y - splinePos.y) ** 2
-                    ) / Math.max(tSample - t, 0.0001);
+                    ) / Math.max(eps, 0.0001);
 
                     // easeOutQuad derivative: d/dx[1-(1-x)^2] = 2(1-x)
                     const easingDeriv = 2 * (1 - linearT);
