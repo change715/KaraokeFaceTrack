@@ -2250,7 +2250,7 @@
 
                 const displayChar = (p.isKept && p.finalChar && spellTransProgress >= 1) ? p.finalChar : p.char;
 
-                renderData.push({ p, pos, noiseVal, alpha, r, g, b, size, autoScaledSize, spellShrink, displayChar, t });
+                renderData.push({ p, pos, noiseVal, alpha, r, g, b, size, autoScaledSize, spellShrink, displayChar, t, linearT });
             }
 
             // Smooth the per-segment averages over time to prevent jumps
@@ -2265,6 +2265,108 @@
             // Clean up segments no longer visible
             for (const sid in segAvgSmoothed) {
                 if (!segSizes[sid]) delete segAvgSmoothed[sid];
+            }
+
+            // ── Pass 1.5: Enforce letter spacing to prevent overlap ──
+            // Group particles by segment, measure actual character widths,
+            // and cascade min/max distance constraints from lead outward.
+            {
+                const segGroups = {};
+                for (const d of renderData) {
+                    const sid = d.p.segIdx;
+                    if (sid === undefined || sid < 0) continue;
+                    if (!segGroups[sid]) segGroups[sid] = [];
+                    segGroups[sid].push(d);
+                }
+
+                // Measure character widths at a reference size (scales linearly)
+                const REF_SIZE = 100;
+                const _cwCache = {};
+                const charWidthNorm = (ch) => {
+                    if (_cwCache[ch] === undefined) {
+                        ctx.font = `bold ${REF_SIZE}px 'Helvetica Neue', Arial, sans-serif`;
+                        _cwCache[ch] = ctx.measureText(ch).width / REF_SIZE;
+                    }
+                    return _cwCache[ch];
+                };
+
+                for (const sid in segGroups) {
+                    const group = segGroups[sid];
+                    if (group.length < 2) continue;
+
+                    // Sort by charIndex: 0 = lead (farthest along curve)
+                    group.sort((a, b) => a.p.charIndex - b.p.charIndex);
+
+                    // Compute final rendered size and measured char width for each
+                    for (const d of group) {
+                        let sz = d.size;
+                        if (doAutoScale && d.p.totalChars > 1 && d.p.segDuration > 0 &&
+                            segAvgSmoothed[d.p.segIdx] !== undefined) {
+                            const blend = Math.min(d.t / P.scaleNormAt, 1.0);
+                            sz = lerp(d.size, segAvgSmoothed[d.p.segIdx], blend);
+                        }
+                        sz *= d.spellShrink;
+                        d._sz = sz;
+                        d._cw = charWidthNorm(d.displayChar) * sz;
+                    }
+
+                    // Cascade spacing constraints from lead (charIndex 0) outward
+                    let lastAdjusted = group[0]; // anchor: lead character
+                    for (let i = 1; i < group.length; i++) {
+                        const curr = group[i];
+
+                        // Skip characters still in burst phase — their positions
+                        // are dominated by the burst animation, not the curve
+                        if (curr.linearT < P.burstDuration * 2) continue;
+
+                        const prev = lastAdjusted;
+
+                        let dx = curr.pos.x - prev.pos.x;
+                        let dy = curr.pos.y - prev.pos.y;
+                        let dist = Math.sqrt(dx * dx + dy * dy);
+
+                        // Determine required spacing based on actual character metrics
+                        const isWordBoundary = prev.displayChar === ' ' || curr.displayChar === ' ';
+                        const letterGap = curr._sz * 0.05;
+                        const wordGap = curr._sz * 0.35;
+                        const gap = isWordBoundary ? wordGap : letterGap;
+                        const minDist = (prev._cw + curr._cw) * 0.5 + gap;
+                        const maxDist = minDist * 2.5;
+
+                        if (dist < 0.5) {
+                            // Characters at essentially the same point —
+                            // use curve tangent direction to separate them
+                            const eps = 0.01;
+                            const tLo = Math.max(curr.t - eps, 0);
+                            const tHi = Math.min(curr.t + eps, 1);
+                            const pLo = getParticlePos(curr.p, tLo);
+                            const pHi = getParticlePos(curr.p, tHi);
+                            // Direction from ahead (high t) to behind (low t) = toward mouth
+                            let tx = pLo.x - pHi.x;
+                            let ty = pLo.y - pHi.y;
+                            const tl = Math.sqrt(tx * tx + ty * ty) || 1;
+                            curr.pos = {
+                                x: prev.pos.x + (tx / tl) * minDist,
+                                y: prev.pos.y + (ty / tl) * minDist,
+                            };
+                        } else if (dist < minDist) {
+                            // Too close — push apart while preserving natural direction
+                            const ratio = minDist / dist;
+                            curr.pos = {
+                                x: prev.pos.x + dx * ratio,
+                                y: prev.pos.y + dy * ratio,
+                            };
+                        } else if (dist > maxDist) {
+                            // Too far — pull closer to keep letters grouped as words
+                            const ratio = maxDist / dist;
+                            curr.pos = {
+                                x: prev.pos.x + dx * ratio,
+                                y: prev.pos.y + dy * ratio,
+                            };
+                        }
+                        lastAdjusted = curr;
+                    }
+                }
             }
 
             // Pass 2: render with uniform per-segment sizing
