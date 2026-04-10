@@ -1706,7 +1706,7 @@
             const sdx = tx - p.startX;
             const sdy = ty - p.startY;
             const sDist = Math.sqrt(sdx * sdx + sdy * sdy);
-            const minDist = Math.max(W, H) * 0.45;
+            const minDist = Math.max(W, H) * 0.7;
             if (sDist < minDist) {
                 if (sDist > 1) {
                     const scale = minDist / sDist;
