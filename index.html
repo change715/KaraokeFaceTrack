@@ -2267,21 +2267,7 @@
                 if (!segSizes[sid]) delete segAvgSmoothed[sid];
             }
 
-            // Pass 2: render with uniform per-segment sizing + neighbor distance cap
-            // Group renderData by segment, sorted by charIndex for neighbor checks
-            const segGroupsSorted = {};
-            for (let i = 0; i < renderData.length; i++) {
-                const d = renderData[i];
-                const sid = d.p.segIdx;
-                if (!segGroupsSorted[sid]) segGroupsSorted[sid] = [];
-                segGroupsSorted[sid].push(d);
-            }
-            for (const sid in segGroupsSorted) {
-                const arr = segGroupsSorted[sid];
-                arr.sort((a, b) => a.p.charIndex - b.p.charIndex);
-                for (let i = 0; i < arr.length; i++) arr[i]._segOrder = i;
-            }
-
+            // Pass 2: render with uniform per-segment sizing
             for (const d of renderData) {
                 let size = d.size;
                 if (doAutoScale && d.p.totalChars > 1 && d.p.segDuration > 0) {
@@ -2294,29 +2280,6 @@
                     }
                 }
                 size *= d.spellShrink;
-
-                // Cap size based on actual distance to nearest same-segment neighbor
-                if (doAutoScale && d.p.totalChars > 1) {
-                    const sid = d.p.segIdx;
-                    const group = segGroupsSorted[sid];
-                    if (group && group.length > 1) {
-                        const myIdx = d._segOrder;
-                        let minDist = Infinity;
-                        for (let offset = -1; offset <= 1; offset += 2) {
-                            const ni = myIdx + offset;
-                            if (ni >= 0 && ni < group.length) {
-                                const nd = group[ni];
-                                const dx = d.pos.x - nd.pos.x;
-                                const dy = (d.pos.y + d.noiseVal) - (nd.pos.y + nd.noiseVal);
-                                const dist = Math.sqrt(dx * dx + dy * dy);
-                                if (dist < minDist) minDist = dist;
-                            }
-                        }
-                        if (minDist < size * 0.9 && minDist > 0) {
-                            size = Math.max(minDist / 0.9, P.charSize * P.minCharScale);
-                        }
-                    }
-                }
 
                 ctx.save();
                 ctx.globalAlpha = d.alpha;
