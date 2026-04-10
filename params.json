@@ -13,7 +13,7 @@
     "fadeEnd": 1,
     "minCharScale": 0.31,
     "scaleNormAt": 0.38,
-    "linearBlend": 0.75,
+    "linearBlend": 0.35,
     "spellGrouping": 1.9,
     "spellTransStart": 0.18,
     "spellTransEnd": 0.41,
