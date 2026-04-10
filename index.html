@@ -1699,6 +1699,8 @@
             // Face moves right → target moves right. Face moves down → target moves down.
             let tx = p.startX - W * 0.5;
             let ty = p.startY - H * 0.35;
+            // Never let target drift right of the configured targetX
+            tx = Math.min(tx, W * P.targetX);
             const targetOffset = (Math.sin(p.seed * 7.13) * 0.5 + Math.sin(p.seed * 3.71) * 0.3 + Math.sin(p.seed * 11.3) * 0.2) * P.targetNoise;
             ty += targetOffset;
 
@@ -2273,8 +2275,14 @@
                     const linearTGap = (spawnGap * fontSpeedScale) / P.charLifetime;
                     const expectedSpacing = splineSpeed * easingDeriv * linearTGap;
 
-                    if (expectedSpacing > 0 && expectedSpacing < size) {
-                        autoScaledSize = Math.max(expectedSpacing * 0.8, P.charSize * P.minCharScale);
+                    if (expectedSpacing > 0) {
+                        // Smoothly scale: size tracks spacing with no hard threshold.
+                        // When spacing is abundant, min() keeps full size unchanged.
+                        // As spacing shrinks, size shrinks proportionally.
+                        autoScaledSize = Math.max(
+                            Math.min(size, expectedSpacing * 0.85),
+                            P.charSize * P.minCharScale
+                        );
                     }
 
                     // Accumulate for per-segment average
