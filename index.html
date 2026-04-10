@@ -1836,6 +1836,7 @@
                     prevKeptExtrasBefore: cm ? (cm.prevKeptExtrasBefore || 0) : 0,
                     segDuration: segDuration,
                     segIdx: currentSegIdx,
+                    tOffset: 0,  // persistent push offset along spline
                 });
                 charSpawnIndex++;
             }
@@ -2112,8 +2113,11 @@
 
         // ─── Render particles ───
         const segAvgSmoothed = {}; // persistent smoothed avg size per segment
+        let prevRenderTime = 0;
         function renderParticles(nowMs) {
             const nowSec = nowMs / 1000;
+            const dt = prevRenderTime > 0 ? Math.min((nowMs - prevRenderTime) / 1000, 0.05) : 0.016;
+            prevRenderTime = nowMs;
             particles = particles.filter(p => (nowSec - p.spawnTime) < P.charLifetime);
 
             const fontSpeedScale = Math.max(1, P.charSize / 80);
@@ -2155,7 +2159,9 @@
                     t = easeBlended(linearT, P.linearBlend);
                 }
 
-                const splinePos = getParticlePos(p, t);
+                // Apply persistent repulsion offset
+                const tWithOffset = Math.min(t + p.tOffset, 1.0);
+                const splinePos = getParticlePos(p, tWithOffset);
                 let pos;
                 if (linearT < P.burstDuration) {
                     const burstT = linearT / P.burstDuration;
@@ -2250,7 +2256,7 @@
 
                 const displayChar = (p.isKept && p.finalChar && spellTransProgress >= 1) ? p.finalChar : p.char;
 
-                renderData.push({ p, pos, noiseVal, alpha, r, g, b, size, autoScaledSize, spellShrink, displayChar, t });
+                renderData.push({ p, pos, noiseVal, alpha, r, g, b, size, autoScaledSize, spellShrink, displayChar, t, tWithOffset });
             }
 
             // Smooth the per-segment averages over time to prevent jumps
@@ -2265,6 +2271,46 @@
             // Clean up segments no longer visible
             for (const sid in segAvgSmoothed) {
                 if (!segSizes[sid]) delete segAvgSmoothed[sid];
+            }
+
+            // Repulsion: persistent tOffset pushes chars apart along the spline
+            // Group by segment, sorted by tWithOffset (ascending: mouth → target)
+            const repulsionGroups = {};
+            for (const d of renderData) {
+                const sid = d.p.segIdx;
+                if (!repulsionGroups[sid]) repulsionGroups[sid] = [];
+                repulsionGroups[sid].push(d);
+            }
+            for (const sid in repulsionGroups) {
+                const group = repulsionGroups[sid];
+                group.sort((a, b) => a.tWithOffset - b.tWithOffset);
+                // Walk from mouth → target, push ahead chars if too close
+                for (let i = 0; i < group.length - 1; i++) {
+                    const behind = group[i];
+                    const ahead = group[i + 1];
+                    const minSpacing = Math.max(behind.size, ahead.size) * 0.6;
+                    const dx = ahead.pos.x - behind.pos.x;
+                    const dy = (ahead.pos.y + ahead.noiseVal) - (behind.pos.y + behind.noiseVal);
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < minSpacing) {
+                        // Gently increase tOffset on the ahead particle
+                        const pushStrength = 0.15 * dt; // gradual accumulation
+                        ahead.p.tOffset = Math.min(ahead.p.tOffset + pushStrength, 0.5);
+                    }
+                }
+            }
+            // Decay tOffset gradually so chars settle back when spacing is fine
+            for (const p of particles) {
+                p.tOffset *= (1 - 0.5 * dt);
+                if (p.tOffset < 0.0001) p.tOffset = 0;
+            }
+            // Recompute positions for pushed particles
+            for (const d of renderData) {
+                if (d.p.tOffset > 0.0001) {
+                    const newT = Math.min(d.t + d.p.tOffset, 1.0);
+                    d.tWithOffset = newT;
+                    d.pos = getParticlePos(d.p, newT);
+                }
             }
 
             // Pass 2: render with uniform per-segment sizing
