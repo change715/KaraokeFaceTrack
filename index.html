@@ -1698,15 +1698,25 @@
             let tx = W * P.targetX;
             const tyBase = H * P.targetY;
             const targetOffset = (Math.sin(p.seed * 7.13) * 0.5 + Math.sin(p.seed * 3.71) * 0.3 + Math.sin(p.seed * 11.3) * 0.2) * P.targetNoise;
-            const ty = tyBase + targetOffset;
+            let ty = tyBase + targetOffset;
 
-            // When the face is in the left third of the screen, the curve
-            // compresses and letters bunch up. Progressively push target X
-            // further away the closer the face gets to the left edge.
-            const leftThird = W / 3;
-            if (p.startX < leftThird) {
-                const pushAmount = (1 - p.startX / leftThird) * W * 0.4;
-                tx -= pushAmount;
+            // Ensure minimum distance between face and target so the curve
+            // has enough length for letters to spread out. Push both X and Y
+            // away from the face proportionally when they're too close.
+            const sdx = tx - p.startX;
+            const sdy = ty - p.startY;
+            const sDist = Math.sqrt(sdx * sdx + sdy * sdy);
+            const minDist = Math.max(W, H) * 0.45;
+            if (sDist < minDist) {
+                if (sDist > 1) {
+                    const scale = minDist / sDist;
+                    tx = p.startX + sdx * scale;
+                    ty = p.startY + sdy * scale;
+                } else {
+                    // Face is right on target — push toward bottom-left
+                    tx = p.startX - minDist * 0.7;
+                    ty = p.startY + minDist * 0.7;
+                }
             }
 
             if (!P.useMidpoint) {
