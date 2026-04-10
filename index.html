@@ -1700,14 +1700,13 @@
             const targetOffset = (Math.sin(p.seed * 7.13) * 0.5 + Math.sin(p.seed * 3.71) * 0.3 + Math.sin(p.seed * 11.3) * 0.2) * P.targetNoise;
             const ty = tyBase + targetOffset;
 
-            // When the face (start) is too close to the target, the curve
-            // compresses and letters bunch up. Push target X further away
-            // to maintain enough curve length for readable letter spacing.
-            const xDist = Math.abs(tx - p.startX);
-            const minXSpread = W * 0.3;
-            if (xDist < minXSpread) {
-                const xDir = tx <= p.startX ? -1 : 1;
-                tx = p.startX + xDir * minXSpread;
+            // When the face is in the left third of the screen, the curve
+            // compresses and letters bunch up. Progressively push target X
+            // further away the closer the face gets to the left edge.
+            const leftThird = W / 3;
+            if (p.startX < leftThird) {
+                const pushAmount = (1 - p.startX / leftThird) * W * 0.4;
+                tx -= pushAmount;
             }
 
             if (!P.useMidpoint) {
