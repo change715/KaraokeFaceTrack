@@ -1700,23 +1700,19 @@
             const targetOffset = (Math.sin(p.seed * 7.13) * 0.5 + Math.sin(p.seed * 3.71) * 0.3 + Math.sin(p.seed * 11.3) * 0.2) * P.targetNoise;
             let ty = tyBase + targetOffset;
 
-            // Ensure minimum distance between face and target so the curve
-            // has enough length for letters to spread out. Push both X and Y
-            // away from the face proportionally when they're too close.
-            const sdx = tx - p.startX;
-            const sdy = ty - p.startY;
-            const sDist = Math.sqrt(sdx * sdx + sdy * sdy);
-            const minDist = Math.max(W, H) * 0.7;
-            if (sDist < minDist) {
-                if (sDist > 1) {
-                    const scale = minDist / sDist;
-                    tx = p.startX + sdx * scale;
-                    ty = p.startY + sdy * scale;
-                } else {
-                    // Face is right on target — push toward bottom-left
-                    tx = p.startX - minDist * 0.7;
-                    ty = p.startY + minDist * 0.7;
-                }
+            // Ensure minimum X and Y distance between face and target
+            // independently, so head X movement only affects target X, etc.
+            const minXDist = W * 0.5;
+            const minYDist = H * 0.4;
+            const xDiff = tx - p.startX;
+            const yDiff = ty - p.startY;
+            const xDir = xDiff < 0 ? -1 : (xDiff > 0 ? 1 : -1);
+            const yDir = yDiff < 0 ? -1 : (yDiff > 0 ? 1 : -1);
+            if (Math.abs(xDiff) < minXDist) {
+                tx = p.startX + xDir * minXDist;
+            }
+            if (Math.abs(yDiff) < minYDist) {
+                ty = p.startY + yDir * minYDist;
             }
 
             if (!P.useMidpoint) {
