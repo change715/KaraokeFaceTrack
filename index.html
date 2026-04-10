@@ -2305,7 +2305,7 @@
 
                 const displayChar = (p.isKept && p.finalChar && spellTransProgress >= 1) ? p.finalChar : p.char;
 
-                renderData.push({ p, pos, noiseVal, alpha, r, g, b, size, autoScaledSize, spellShrink, displayChar, t });
+                renderData.push({ p, pos, noiseVal, alpha, r, g, b, size, autoScaledSize, spellShrink, displayChar, t, linearT });
             }
 
             // Smooth the per-segment averages over time to prevent jumps
@@ -2320,6 +2320,81 @@
             // Clean up segments no longer visible
             for (const sid in segAvgSmoothed) {
                 if (!segSizes[sid]) delete segAvgSmoothed[sid];
+            }
+
+            // ── Pass 1.5: Enforce minimum letter spacing ──
+            // The easing function causes characters to bunch at curve ends
+            // even after arc-length remapping. This pass checks for bounding-box
+            // overlap and pushes characters apart along the curve tangent.
+            {
+                const segGroups = {};
+                for (const d of renderData) {
+                    const sid = d.p.segIdx;
+                    if (sid === undefined || sid < 0) continue;
+                    if (!segGroups[sid]) segGroups[sid] = [];
+                    segGroups[sid].push(d);
+                }
+
+                for (const sid in segGroups) {
+                    const group = segGroups[sid];
+                    if (group.length < 2) continue;
+                    group.sort((a, b) => a.p.charIndex - b.p.charIndex);
+
+                    // Compute rendered size for spacing measurement
+                    for (const d of group) {
+                        let sz = d.size;
+                        if (doAutoScale && d.p.totalChars > 1 && d.p.segDuration > 0 &&
+                            segAvgSmoothed[d.p.segIdx] !== undefined) {
+                            const blend = Math.min(d.t / P.scaleNormAt, 1.0);
+                            sz = lerp(d.size, segAvgSmoothed[d.p.segIdx], blend);
+                        }
+                        sz *= d.spellShrink;
+                        d._sz = sz;
+                    }
+
+                    let lastFixed = group[0];
+                    for (let i = 1; i < group.length; i++) {
+                        const curr = group[i];
+                        if (curr.linearT < P.burstDuration) continue;
+                        const prev = lastFixed;
+
+                        const dx = curr.pos.x - prev.pos.x;
+                        const dy = curr.pos.y - prev.pos.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+
+                        // Minimum distance: use the larger character's rendered size
+                        // scaled to approximate the space one letter occupies
+                        const charSpan = Math.max(prev._sz, curr._sz) * 0.55;
+                        const isSpace = prev.displayChar === ' ' || curr.displayChar === ' ';
+                        const minDist = isSpace ? charSpan * 1.4 : charSpan;
+
+                        if (dist < minDist) {
+                            if (dist > 1) {
+                                // Push apart along the natural prev→curr direction
+                                const ratio = minDist / dist;
+                                curr.pos = {
+                                    x: prev.pos.x + dx * ratio,
+                                    y: prev.pos.y + dy * ratio,
+                                };
+                            } else {
+                                // At same point — use curve tangent to separate
+                                const eps = 0.01;
+                                const tLo = Math.max(curr.t - eps, 0);
+                                const tHi = Math.min(curr.t + eps, 1);
+                                const pLo = getParticlePos(curr.p, tLo);
+                                const pHi = getParticlePos(curr.p, tHi);
+                                let tx = pLo.x - pHi.x;
+                                let ty = pLo.y - pHi.y;
+                                const tl = Math.sqrt(tx * tx + ty * ty) || 1;
+                                curr.pos = {
+                                    x: prev.pos.x + (tx / tl) * minDist,
+                                    y: prev.pos.y + (ty / tl) * minDist,
+                                };
+                            }
+                        }
+                        lastFixed = curr;
+                    }
+                }
             }
 
             // Pass 2: render with uniform per-segment sizing
