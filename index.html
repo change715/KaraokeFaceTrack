@@ -298,7 +298,7 @@
             mouthSmooth:0.8, fadeInStart:0, fadeInEnd:0.05,
             cp1Along:-0.5, cp1Perp:0.48, cp2Along:0.19, cp2Perp:0.24,
             midX:0.15, midY:0.35, midTanIn:0.65, midTanInAngle:0, midTanOut:0.65, midTanOutAngle:0, useMidpoint:1,
-            targetX:0, targetY:0.2,
+            targetX:0, targetY:0.2, targetYTrack:0.35,
             colorStartR:255, colorStartG:255, colorStartB:255,
             colorEndR:220, colorEndG:50, colorEndB:50,
             burstDistance:300, burstDuration:0.12, dirSensitivity:0.15, dirBiasX:0, targetNoise:60,
@@ -392,6 +392,7 @@
                 { key: 'midTanOutAngle', label: 'Mid tan out angle',min: -90, max: 90, step: 1 },
                 { key: 'targetX',      label: 'Target X %',    min: 0, max: 0.4, step: 0.01 },
                 { key: 'targetY',      label: 'Target Y %',    min: 0, max: 0.4, step: 0.01 },
+                { key: 'targetYTrack', label: 'Target Y tracking', min: 0, max: 1.0, step: 0.01 },
                 { key: 'targetNoise',  label: 'End noise',     min: 0, max: 60, step: 1 },
                 { button: 'spline-viz-btn', label: 'Show Spline Path' },
                 { accordionEnd: true },
@@ -1698,7 +1699,7 @@
             // Target tracks face with a fixed offset — no thresholds, no jumps.
             // Face moves right → target moves right. Face moves down → target moves down.
             let tx = p.startX - W * 0.5;
-            let ty = p.startY - H * 0.35 + H * P.targetY;
+            let ty = H * P.targetY + (p.startY - H * P.targetY) * P.targetYTrack;
             // Never let target drift right of the configured targetX
             tx = Math.min(tx, W * P.targetX);
             const targetOffset = (Math.sin(p.seed * 7.13) * 0.5 + Math.sin(p.seed * 3.71) * 0.3 + Math.sin(p.seed * 11.3) * 0.2) * P.targetNoise;
