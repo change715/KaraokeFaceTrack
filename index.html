@@ -2332,7 +2332,7 @@
                 // than hard-snapping to a stop.
                 if (p.isKept !== undefined) {
                     if (p.segIdx in segPrevKeptT) {
-                        const ceiling = segPrevKeptT[p.segIdx] - 0.003;
+                        const ceiling = segPrevKeptT[p.segIdx] - 0.01;
                         if (t > ceiling) t = ceiling;
                     }
                     segPrevKeptT[p.segIdx] = t;
@@ -2345,7 +2345,16 @@
                 const wordStartKey = p.segIdx + '_' + (p.charIndex - p.wordIndexInWord);
                 if (!(wordStartKey in wordLeaderT)) wordLeaderT[wordStartKey] = t;
                 const leaderT = wordLeaderT[wordStartKey];
-                const uniformBaseT = t + (leaderT - t) * P.kerningUniformity;
+                // During spelling transition, ramp uniformity toward 1.0 so all
+                // letters converge to the leader's t — only finalWordKerning
+                // separates them. This eliminates the "Ha llelu jah" gap clusters
+                // caused by letters at different t values having different uniformBaseT.
+                let effectiveUniformity = P.kerningUniformity;
+                if (p.isKept !== undefined && spellTransProgress > 0) {
+                    const uSmooth = spellTransProgress * spellTransProgress * (3 - 2 * spellTransProgress);
+                    effectiveUniformity = P.kerningUniformity + (1.0 - P.kerningUniformity) * uSmooth;
+                }
+                const uniformBaseT = t + (leaderT - t) * effectiveUniformity;
                 const kerningRampLinear = Math.max(0, Math.min(1, t / Math.max(0.001, P.kerningReach)));
                 const kerningRamp = kerningRampLinear * kerningRampLinear * (3 - 2 * kerningRampLinear);
                 // During spelling transition, letters migrate their kerning index
