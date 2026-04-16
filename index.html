@@ -737,6 +737,11 @@
         let smoothYaw = 0;
         let smoothPitch = 0;
 
+        // ─── Debug mode: bypass webcam and synthesize mouth + head pose ───
+        // Enable via URL ?debug=1 or press "D" while running.
+        // Mouth sits at bottom third and oscillates left/right; head yaw/pitch drift.
+        let debugMode = /[?&]debug=1\b/.test(location.search);
+
         // Each particle: { char, spawnTime, startX, startY, seed, burstDx, burstDy }
         let particles        = [];
         let lastSegmentIndex = -1;
@@ -1140,6 +1145,7 @@
         let currentDeviceId = '';
 
         async function startCamera(deviceId) {
+            if (debugMode) { log('Debug mode: skipping camera.'); return; }
             log('Requesting camera...');
             // Stop existing tracks
             if (video.srcObject) {
@@ -1667,10 +1673,27 @@
             return true;
         }
 
+        // Debug-mode tracker: synthesize a mouth at bottom third oscillating
+        // left/right, plus slowly drifting head yaw/pitch. Writes to the same
+        // smoothing path real tracking uses.
+        function tryDebugSim(timestamp) {
+            const t = timestamp / 1000;
+            const w = canvas.width || window.innerWidth;
+            const h = canvas.height || window.innerHeight;
+            // Mouth: bottom third, 8-second lateral sweep at ±30% of width.
+            const rawX = w * 0.5 + Math.sin(t * (2 * Math.PI / 8)) * (w * 0.30);
+            const rawY = h * 0.66;
+            // Head drift: two slow offset sines so yaw and pitch move independently.
+            const yaw   = Math.sin(t * 0.35 + 0.7) * 0.4 + Math.sin(t * 0.17 + 2.1) * 0.2;
+            const pitch = Math.sin(t * 0.28 + 2.4) * 0.3;
+            applyTracking(rawX, rawY, yaw, pitch, timestamp);
+        }
+
         function detectFace(timestamp) {
             const ts = Math.round(timestamp);
             if (ts <= lastDetectTs) return;
             lastDetectTs = ts;
+            if (debugMode) { tryDebugSim(timestamp); return; }
             try {
                 // Primary: face landmarks (mouth → face nose fallback)
                 if (tryFaceDetect(ts, timestamp)) return;
@@ -2602,6 +2625,10 @@
             }
             if (e.key === '1') {
                 toggleCleanMode();
+            }
+            if (e.key === 'd' || e.key === 'D') {
+                debugMode = !debugMode;
+                log('Debug mode: ' + (debugMode ? 'ON' : 'OFF'));
             }
             if (e.key === 'p' || e.key === 'P') {
                 // Toggle params-only mode: show tweaks panel without camera feed
