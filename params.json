@@ -22,6 +22,7 @@
     "spellTransStart": 0.18,
     "spellTransEnd": 0.41,
     "spellFadeSpeed": 5.0,
+    "finalWordKerning": 0.025,
     "burstDistance": 325,
     "burstDuration": 0.28,
     "dirSensitivity": 0.04,
