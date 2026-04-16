@@ -9,7 +9,7 @@
     "noiseFreq": 0.5,
     "fadeInStart": 0,
     "fadeInEnd": 0.05,
-    "fadeStart": 0.7,
+    "fadeStart": 0.92,
     "fadeEnd": 1,
     "minCharScale": 0.38,
     "scaleNormAt": 0.4,
