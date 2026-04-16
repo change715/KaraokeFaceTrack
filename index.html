@@ -306,7 +306,7 @@
             cp1Along:-0.5, cp1Perp:0.48, cp2Along:0.19, cp2Perp:0.24,
             midX:0.15, midY:0.35, midTanIn:0.65, midTanInAngle:0, midTanOut:0.65, midTanOutAngle:0, useMidpoint:1,
             targetX:0, targetY:0.2, targetYTrack:0.35, trackGrace:2, wordGap:0.1, letterKerning:0, kerningReach:0.3, kerningUniformity:0,
-            spellTransStart:0.18, spellTransEnd:0.85, spellFadeSpeed:5.00, spellGrouping:1.00, finalWordKerning:0.025, spellBrake:0.05,
+            spellTransStart:0.18, spellTransEnd:0.44, spellFadeSpeed:3.80, spellGrouping:1.70,
             colorStartR:255, colorStartG:255, colorStartB:255,
             colorEndR:220, colorEndG:50, colorEndB:50,
             burstDistance:300, burstDuration:0.12, dirSensitivity:0.15, dirBiasX:0, targetNoise:60,
@@ -383,8 +383,6 @@
                 { key: 'spellTransStart', label: 'Trans start (t)', min: 0.05, max: 0.8, step: 0.01 },
                 { key: 'spellTransEnd',   label: 'Trans end (t)',   min: 0.1,  max: 0.9, step: 0.01 },
                 { key: 'spellFadeSpeed',  label: 'Extra fade speed', min: 0.2, max: 5.0, step: 0.1 },
-                { key: 'finalWordKerning', label: 'Final word kerning', min: 0.005, max: 0.10, step: 0.002 },
-                { key: 'spellBrake',       label: 'Leader brake',       min: 0.0,   max: 0.30, step: 0.01 },
                 { accordionEnd: true },
                 { accordion: 'Burst' },
                 { key: 'burstDistance', label: 'Burst dist (px)', min: 10, max: 600, step: 5 },
@@ -2270,35 +2268,6 @@
             // so within-word letters can share their leader's t for uniform spacing.
             const wordLeaderT = {};
 
-            // ── Per-segment spelling-transition pre-pass ────────────────────
-            // The whole word transitions together — anchored to the LAST
-            // letter's baseT. While the segment is still spawning letters,
-            // progress stays at 0; once the last letter has aged into
-            // [spellTransStart, spellTransEnd], the whole group transitions
-            // in sync. This keeps early letters on screen (fade is blocked
-            // while progress < 1) until the late letters catch up and the
-            // final word has fully formed.
-            // Progress is anchored to the LEADER's natural spline-t (position-based,
-            // not time-based). Mid-kept index is used below to center the collapse.
-            const segLeaderT = {};
-            const segMidKeptIndex = {};
-            for (const p of particles) {
-                if (p.isKept !== true) continue;
-                if (p.keptIndex === 0) {
-                    const pAge = nowSec - p.spawnTime;
-                    const pLinearT = Math.min((pAge * fontSpeedScale) / P.charLifetime, 1.0);
-                    segLeaderT[p.segIdx] = easeBlended(pLinearT, P.linearBlend);
-                }
-                if (!(p.segIdx in segMidKeptIndex)) {
-                    segMidKeptIndex[p.segIdx] = Math.floor(p.totalKept / 2);
-                }
-            }
-            const segSpellProgress = {};
-            for (const sIdx in segLeaderT) {
-                segSpellProgress[sIdx] = Math.max(0, Math.min(1,
-                    (segLeaderT[sIdx] - P.spellTransStart) / (P.spellTransEnd - P.spellTransStart)));
-            }
-
             // Pass 1: compute render data and per-char auto-scaled sizes
             const renderData = [];
             const segSizes = {}; // segIdx -> { sum, count } for averaging
@@ -2312,47 +2281,34 @@
                 let linearT = Math.min((age * fontSpeedScale) / P.charLifetime, 1.0);
                 let t = easeBlended(linearT, P.linearBlend);
 
-                // Spelling-transition progress is SEGMENT-shared (see pre-pass).
-                // All letters of a spelling word see the same progress, keyed
-                // to the last-spawned letter so leaders wait for the rest.
+                // Per-letter spelling-transition progress driven by baseT.
+                // Each letter's collapse ramps from 0→1 as it ages through
+                // [spellTransStart, spellTransEnd] — so the word naturally
+                // transitions as it moves along the spline.
                 let spellTransProgress = 0;
                 if (p.isKept !== undefined) {
-                    spellTransProgress = segSpellProgress[p.segIdx] || 0;
-                }
-
-                // Per-letter progress for the extras sequential fade.
-                // The shared progress above saturates at 1 before most extras have
-                // even spawned, which makes all of them pass the keptSpawned gate
-                // at the same moment and fade together. A per-letter progress keeps
-                // each extra's fade window anchored to its own age, so extras fade
-                // sequentially as each one matures.
-                let extraFadeProgressT = 0;
-                if (p.isKept === false) {
-                    extraFadeProgressT = Math.max(0, Math.min(1,
+                    spellTransProgress = Math.max(0, Math.min(1,
                         (baseT - P.spellTransStart) / (P.spellTransEnd - P.spellTransStart)));
                 }
 
-                // Direct t-override collapse. Each kept letter targets
-                //   targetT = leaderT − smoothed×spellBrake − anchorKeptIndex × finalWordKerning
-                // The spellBrake term pulls the WHOLE word (including the leader)
-                // behind its natural position as progress ramps, so leaders slow
-                // enough for trailers to catch up. A per-particle monotonic clamp
-                // prevents any reversal when brake speed briefly exceeds natural.
-                if (spellTransProgress > 0 && p.isKept !== undefined) {
-                    const leaderT = segLeaderT[p.segIdx];
-                    if (leaderT !== undefined) {
-                        const anchorKeptIndex = (p.isKept === true) ? p.keptIndex : p.prevKeptIndex;
-                        if (anchorKeptIndex >= 0) {
-                            const smoothed = spellTransProgress * spellTransProgress * (3 - 2 * spellTransProgress);
-                            const targetT = Math.max(0, leaderT - smoothed * P.spellBrake - anchorKeptIndex * P.finalWordKerning);
-                            t = t + (targetT - t) * smoothed;
-                            // Monotonic-forward guard so brake never rewinds the spline position.
-                            if (p._prevEffectiveT !== undefined && t < p._prevEffectiveT) {
-                                t = p._prevEffectiveT;
-                            }
-                            p._prevEffectiveT = t;
-                        }
+                // Kept letters: age-boost proportional to leading extras. Letters
+                // that spawned after more phonetic extras speed up more, so they
+                // catch the leader to form the final word with consistent kerning.
+                if (p.isKept && spellTransProgress > 0 && p.extrasBefore > 0) {
+                    const ageBoost = spellTransProgress * (p.extrasBefore / p.totalChars) * p.segDuration * P.spellGrouping;
+                    linearT = Math.min((age * fontSpeedScale + ageBoost) / P.charLifetime, 1.0);
+                    if (spellTransProgress < 1 && linearT > P.fadeStart) {
+                        linearT = P.fadeStart;
                     }
+                    t = easeBlended(linearT, P.linearBlend);
+                }
+
+                // Extras: follow their preceding kept letter (ahead, speeding away)
+                // so they travel with the group as it collapses rather than lagging.
+                if (p.isKept === false && p.prevKeptExtrasBefore > 0 && spellTransProgress > 0) {
+                    const prevKeptBoost = spellTransProgress * (p.prevKeptExtrasBefore / p.totalChars) * p.segDuration * P.spellGrouping;
+                    linearT = Math.min((age * fontSpeedScale + prevKeptBoost) / P.charLifetime, 1.0);
+                    t = easeBlended(linearT, P.linearBlend);
                 }
 
                 // Word-gap offset: post-space letters nudged forward on the spline.
@@ -2423,13 +2379,13 @@
                     const keptSpawned = p.nextKeptCharIndex > 0 &&
                         (age - (p.nextKeptCharIndex - p.charIndex) * spawnGapSec) > 0;
 
-                    if (keptSpawned && extraFadeProgressT > 0) {
+                    if (keptSpawned && spellTransProgress > 0) {
                         const fs = p.gapIndex / p.gapSize;
                         const fe = (p.gapIndex + 1) / p.gapSize;
-                        extraFadeProgress = Math.max(0, Math.min(1, (extraFadeProgressT - fs) / (fe - fs)));
-                    } else if (!p.nextKeptCharIndex && extraFadeProgressT > 0.5) {
+                        extraFadeProgress = Math.max(0, Math.min(1, (spellTransProgress - fs) / (fe - fs)));
+                    } else if (!p.nextKeptCharIndex && spellTransProgress > 0.5) {
                         // Trailing extras (no next kept char): fade in second half
-                        extraFadeProgress = (extraFadeProgressT - 0.5) * 2;
+                        extraFadeProgress = (spellTransProgress - 0.5) * 2;
                     }
                     alpha *= Math.pow(1.0 - extraFadeProgress, P.spellFadeSpeed);
                 }
