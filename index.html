@@ -2270,6 +2270,10 @@
             // so within-word letters can share their leader's t for uniform spacing.
             const wordLeaderT = {};
 
+            // Per-segment ordering clamp: tracks the previous kept letter's t so
+            // a trailing kept letter's boost can never push it past the one ahead.
+            const segPrevKeptT = {};
+
             // Pass 1: compute render data and per-char auto-scaled sizes
             const renderData = [];
             const segSizes = {}; // segIdx -> { sum, count } for averaging
@@ -2307,6 +2311,14 @@
                         linearT = P.fadeStart;
                     }
                     t = easeBlended(linearT, P.linearBlend);
+                    // Ordering clamp: this kept letter can't overtake the one ahead.
+                    // Particles are processed in spawn (charIndex) order, so keptIndex
+                    // increases monotonically — segPrevKeptT always holds the preceding
+                    // kept letter's t when we get here.
+                    if (p.segIdx in segPrevKeptT && t > segPrevKeptT[p.segIdx]) {
+                        t = segPrevKeptT[p.segIdx];
+                    }
+                    segPrevKeptT[p.segIdx] = t;
                 }
 
                 // Extras: follow their preceding kept letter (ahead, speeding away)
