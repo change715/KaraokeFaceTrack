@@ -2314,26 +2314,28 @@
                 // end to full over the letter's life, so there's no position jump
                 // at the burst-to-spline boundary and no backward motion.
                 if (p.isKept !== undefined && spellTransProgress > 0 && linearT >= P.burstDuration) {
-                    const smoothProg = spellTransProgress * spellTransProgress * (3 - 2 * spellTransProgress);
-                    const slowMul = 1 - smoothProg * P.spellLeaderSlow;
+                    // Cubic ramp for deceleration (very gradual onset),
+                    // smoothstep for catchup (engages slightly faster).
+                    const slowRamp = spellTransProgress * spellTransProgress * spellTransProgress;
+                    const catchupRamp = spellTransProgress * spellTransProgress * (3 - 2 * spellTransProgress);
+                    const slowMul = 1 - slowRamp * P.spellLeaderSlow;
                     const catchup = (p.charIndex / Math.max(1, p.totalChars - 1)) * p.segDuration * P.spellGrouping;
                     const excess = linearT - P.burstDuration;
                     const excessFrac = excess / Math.max(0.001, 1 - P.burstDuration);
-                    linearT = Math.min(P.burstDuration + excess * slowMul + smoothProg * catchup / P.charLifetime * excessFrac, 1.0);
+                    linearT = Math.min(P.burstDuration + excess * slowMul + catchupRamp * catchup / P.charLifetime * excessFrac, 1.0);
                     if (p.isKept && spellTransProgress < 1 && linearT > P.fadeStart) {
                         linearT = P.fadeStart;
                     }
                     t = easeBlended(linearT, P.linearBlend);
                 }
 
-                // Ordering clamp: no letter can overtake the one ahead. A small
-                // minimum gap prevents letters from stacking at the exact same
-                // position — they decelerate smoothly as they approach rather
-                // than hard-snapping to a stop.
+                // Ordering clamp: no letter can pass the one ahead. No minimum
+                // gap — letters that catch up simply match the ahead-letter's
+                // speed. Visual separation comes from kerningUniformity ramp +
+                // effectiveWordIdx × finalWordKerning, not from t-space gaps.
                 if (p.isKept !== undefined) {
-                    if (p.segIdx in segPrevKeptT) {
-                        const ceiling = segPrevKeptT[p.segIdx] - 0.01;
-                        if (t > ceiling) t = ceiling;
+                    if (p.segIdx in segPrevKeptT && t > segPrevKeptT[p.segIdx]) {
+                        t = segPrevKeptT[p.segIdx];
                     }
                     segPrevKeptT[p.segIdx] = t;
                 }
