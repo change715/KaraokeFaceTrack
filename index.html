@@ -2425,10 +2425,13 @@
                 if (t < P.fadeInEnd) {
                     alpha = t <= P.fadeInStart ? 0 : (t - P.fadeInStart) / (P.fadeInEnd - P.fadeInStart);
                 }
-                // Position-based fade: letters fade as they approach the end of the spline.
+                // Fade-out: position-based for normal lyrics, age-based for spelling
+                // segments. Age-based (baseLinearT) ensures older letters fade first
+                // so "Hallelujah" fades sequentially H→a→l→...→h, not as a cluster.
                 const inSpellTransition = p.isKept !== undefined && spellTransProgress < 1;
-                if (t > P.fadeStart && !inSpellTransition) {
-                    alpha *= 1.0 - (t - P.fadeStart) / (P.fadeEnd - P.fadeStart);
+                const fadeRef = (p.isKept !== undefined) ? baseLinearT : t;
+                if (fadeRef > P.fadeStart && !inSpellTransition) {
+                    alpha *= 1.0 - (fadeRef - P.fadeStart) / (P.fadeEnd - P.fadeStart);
                 }
                 // Extras: sequential fade — gapIndex 0 (closest to the approaching
                 // kept char) fades first; farthest fades last. Only begins once the
