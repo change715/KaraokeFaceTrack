@@ -2310,16 +2310,14 @@
                 // (with fewer extras) stay slow together at the front.
                 if (p.isKept !== undefined && spellTransProgress > 0) {
                     const baseSlow = P.spellLeaderSlow * p.segDuration;
-                    let boost = 0;
-                    if (p.isKept === true) {
-                        boost = (p.extrasBefore / p.totalChars) * p.segDuration * P.spellGrouping;
-                    } else if (p.prevKeptExtrasBefore > 0) {
-                        boost = (p.prevKeptExtrasBefore / p.totalChars) * p.segDuration * P.spellGrouping;
-                    }
-                    // Smoothstep on progress: zero derivative at onset and completion
-                    // so the deceleration/speedup ramps in and out gently.
+                    // Linear speed gradient: each letter is slightly faster than the
+                    // one before it (based on charIndex, not extrasBefore). This gives
+                    // smooth, continuous compression — no discrete speed jumps between
+                    // letter groups. The word moves like a snake: front slows, back
+                    // catches up gradually, ordering clamp prevents overtaking.
+                    const catchup = (p.charIndex / Math.max(1, p.totalChars - 1)) * p.segDuration * P.spellGrouping;
                     const smoothProg = spellTransProgress * spellTransProgress * (3 - 2 * spellTransProgress);
-                    const netBoost = smoothProg * (boost - baseSlow);
+                    const netBoost = smoothProg * (catchup - baseSlow);
                     linearT = Math.min(Math.max(0, (age * fontSpeedScale + netBoost) / P.charLifetime), 1.0);
                     if (p.isKept && spellTransProgress < 1 && linearT > P.fadeStart) {
                         linearT = P.fadeStart;
