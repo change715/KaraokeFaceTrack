@@ -2321,7 +2321,10 @@
                     const slowMul = 1 - slowRamp * P.spellLeaderSlow;
                     const catchup = (p.charIndex / Math.max(1, p.totalChars - 1)) * p.segDuration * P.spellGrouping;
                     const excess = linearT - P.burstDuration;
-                    const excessFrac = excess / Math.max(0.001, 1 - P.burstDuration);
+                    // Square-root ramp: much faster than linear early on (12% at
+                    // excessFrac=0.01 vs 1.5%), so trailing letters get meaningful
+                    // catchup right after burst. Still 0 at burst boundary (no jump).
+                    const excessFrac = Math.sqrt(excess / Math.max(0.001, 1 - P.burstDuration));
                     linearT = Math.min(P.burstDuration + excess * slowMul + catchupRamp * catchup / P.charLifetime * excessFrac, 1.0);
                     t = easeBlended(linearT, P.linearBlend);
                 }
@@ -2425,10 +2428,16 @@
                 // Fade-out: position-based for normal lyrics, age-based for spelling
                 // segments. Age-based (baseLinearT) ensures older letters fade first
                 // so "Hallelujah" fades sequentially H→a→l→...→h, not as a cluster.
+                // Spelling letters use an earlier fade start (tied to spellTransEnd)
+                // so they begin fading shortly after transition completes instead
+                // of lingering at full alpha until the global fadeStart.
                 const inSpellTransition = p.isKept !== undefined && spellTransProgress < 1;
-                const fadeRef = (p.isKept !== undefined) ? baseLinearT : t;
-                if (fadeRef > P.fadeStart && !inSpellTransition) {
-                    alpha *= 1.0 - (fadeRef - P.fadeStart) / (P.fadeEnd - P.fadeStart);
+                const isSpell = p.isKept !== undefined;
+                const fadeRef = isSpell ? baseLinearT : t;
+                const transEndLT = 1 - Math.sqrt(1 - P.spellTransEnd);
+                const effectiveFadeStart = isSpell ? (transEndLT + 0.05) : P.fadeStart;
+                if (fadeRef > effectiveFadeStart && !inSpellTransition) {
+                    alpha *= 1.0 - (fadeRef - effectiveFadeStart) / (P.fadeEnd - effectiveFadeStart);
                 }
                 // Extras: sequential fade — gapIndex 0 (closest to the approaching
                 // kept char) fades first; farthest fades last. Only begins once the
