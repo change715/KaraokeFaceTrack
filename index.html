@@ -288,8 +288,15 @@
         const tweaksPanel  = document.getElementById('tweaks-panel');
 
         // ─── Audio ───
-        const audio = new Audio('Hallelujah_-_Leonard_Cohen_Karaoke_Version_KaraFun.wav');
+        const AUDIO_URL = 'Hallelujah_-_Leonard_Cohen_Karaoke_Version_KaraFun.wav';
+        const audio = new Audio(AUDIO_URL);
         audio.preload = 'auto';
+        // Static servers (like python -m http.server) often don't honor HTTP Range
+        // requests, which breaks audio.currentTime seeking. Fetch the WAV once and
+        // swap src to a blob URL — blob URLs support seeking natively regardless.
+        fetch(AUDIO_URL).then(r => r.blob()).then(blob => {
+            audio.src = URL.createObjectURL(blob);
+        }).catch(e => console.warn('Audio blob fetch failed (seeking may not work):', e));
 
         // ─── Tweakable params ───
         // Hardcoded fallback defaults
@@ -517,6 +524,7 @@
             html += `<button class="tweak-btn" id="grid-toggle-btn">Show Output Grid</button>`;
             html += `<button class="tweak-btn" id="tracking-dot-btn">Show Tracking Dot</button>`;
             html += `<button class="tweak-btn" id="debug-mode-btn">${debugMode ? 'Debug Mode: ON' : 'Debug Mode: OFF'}</button>`;
+            html += `<button class="tweak-btn" id="jump-finale-btn">Jump to Final Hallelujahs</button>`;
             html += `<button class="tweak-btn" id="set-defaults-btn">Set Current as Default</button>`;
             html += `<button class="tweak-btn" id="reset-defaults-btn" style="color:#ff8888;border-color:rgba(255,136,136,0.4);background:rgba(255,136,136,0.1)">Reset to Original Defaults</button>`;
             html += `<button class="tweak-btn" id="hide-ui-btn" style="color:#ffcc66;border-color:rgba(255,204,102,0.4);background:rgba(255,204,102,0.1)">Hide UI (Press 1)</button>`;
@@ -609,6 +617,29 @@
                 debugMode = !debugMode;
                 document.getElementById('debug-mode-btn').textContent = debugMode ? 'Debug Mode: ON' : 'Debug Mode: OFF';
                 log('Debug mode: ' + (debugMode ? 'ON' : 'OFF'));
+            });
+
+            // Jump to the final Hallelujah cluster (starts around 4:05).
+            // Clears live particles so we don't see old segments linger, then seeks
+            // and starts playback. Note: the static-file server must support HTTP
+            // Range requests for the seek to actually land — if it doesn't, the
+            // audio will restart from the beginning.
+            document.getElementById('jump-finale-btn').addEventListener('click', () => {
+                const target = 245; // 4:05 — just before the repeated Hallelujah run
+                particles = [];
+                lastSegmentIndex = -1;
+                charSpawnIndex = 0;
+                audio.currentTime = target;
+                if (audio.paused) audio.play().catch(e => log('Audio error: ' + e.message));
+                // Verify after a beat; many static servers don't honor Range for
+                // WAV, so surface the failure rather than silently stalling at 0.
+                setTimeout(() => {
+                    if (Math.abs(audio.currentTime - target) > 2) {
+                        log('Seek failed (server may not support Range): currentTime=' + audio.currentTime.toFixed(1));
+                    } else {
+                        log('Jumped to ' + audio.currentTime.toFixed(1) + 's');
+                    }
+                }, 300);
             });
 
             // Rebuild the corner/point selector dropdown for current sub-mode
