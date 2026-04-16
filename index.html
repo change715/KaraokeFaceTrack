@@ -1063,6 +1063,7 @@
                             for (let ki = ci - 1; ki >= 0; ki--) {
                                 if (charMap[ki].kept) {
                                     charMap[ci].prevKeptExtrasBefore = charMap[ki].extrasBefore;
+                                    charMap[ci].prevKeptIndex = charMap[ki].keptIndex;
                                     break;
                                 }
                             }
@@ -1912,6 +1913,7 @@
                     nextKeptCharIndex: cm ? (cm.nextKeptCharIndex || 0) : 0,
                     nextKeptExtrasBefore: cm ? (cm.nextKeptExtrasBefore || 0) : 0,
                     prevKeptExtrasBefore: cm ? (cm.prevKeptExtrasBefore || 0) : 0,
+                    prevKeptIndex: cm ? (cm.prevKeptIndex !== undefined ? cm.prevKeptIndex : -1) : -1,
                     segDuration: segDuration,
                     segIdx: currentSegIdx,
                     numSpacesBefore: currentSeg._numSpacesBefore[charSpawnIndex],
@@ -2270,11 +2272,15 @@
                     t = easeBlended(linearT, P.linearBlend);
                 }
 
-                // Extras: follow their preceding kept char (ahead, speeding away)
-                // so they don't fall behind as the group advances.
-                if (p.isKept === false && p.prevKeptExtrasBefore > 0 && spellTransProgress > 0) {
-                    const prevKeptBoost = spellTransProgress * (p.prevKeptExtrasBefore / p.totalChars) * p.segDuration * P.spellGrouping;
-                    linearT = Math.min((age * fontSpeedScale + prevKeptBoost) / P.charLifetime, 1.0);
+                // Extras: inherit the preceding kept letter's center-anchored boost,
+                // so they ride with the group as it collapses rather than lagging at
+                // phonetic positions. Fades (below) handle their disappearance.
+                if (p.isKept === false && p.prevKeptIndex >= 0 && spellTransProgress > 0) {
+                    const midIdx = segMidKeptIndex[p.segIdx] || 0;
+                    const delta = p.prevKeptIndex - midIdx;
+                    const spawnGapSec = p.segDuration / p.totalChars;
+                    const prevKeptBoost = spellTransProgress * delta * spawnGapSec * fontSpeedScale * P.spellGrouping;
+                    linearT = Math.min(Math.max(0, (age * fontSpeedScale + prevKeptBoost) / P.charLifetime), 1.0);
                     t = easeBlended(linearT, P.linearBlend);
                 }
 
