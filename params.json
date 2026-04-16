@@ -20,7 +20,7 @@
     "kerningUniformity": 0.55,
     "spellGrouping": 1.0,
     "spellTransStart": 0.18,
-    "spellTransEnd": 0.41,
+    "spellTransEnd": 0.85,
     "spellFadeSpeed": 5.0,
     "finalWordKerning": 0.025,
     "burstDistance": 325,
