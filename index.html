@@ -2323,9 +2323,6 @@
                     const excess = linearT - P.burstDuration;
                     const excessFrac = excess / Math.max(0.001, 1 - P.burstDuration);
                     linearT = Math.min(P.burstDuration + excess * slowMul + catchupRamp * catchup / P.charLifetime * excessFrac, 1.0);
-                    if (p.isKept && spellTransProgress < 1 && linearT > P.fadeStart) {
-                        linearT = P.fadeStart;
-                    }
                     t = easeBlended(linearT, P.linearBlend);
                 }
 
