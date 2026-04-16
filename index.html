@@ -2381,13 +2381,10 @@
                 if (t < P.fadeInEnd) {
                     alpha = t <= P.fadeInStart ? 0 : (t - P.fadeInStart) / (P.fadeInEnd - P.fadeInStart);
                 }
-                // Time-based fade: uses baseLinearT (age / charLifetime) so letters
-                // always live for a fixed fraction of their lifetime regardless of
-                // where they are on the spline. With position-based fade, a short
-                // spline (head turned right) would hit fadeStart mid-screen.
+                // Position-based fade: letters fade as they approach the end of the spline.
                 const inSpellTransition = p.isKept !== undefined && spellTransProgress < 1;
-                if (baseLinearT > P.fadeStart && !inSpellTransition) {
-                    alpha *= 1.0 - (baseLinearT - P.fadeStart) / (P.fadeEnd - P.fadeStart);
+                if (t > P.fadeStart && !inSpellTransition) {
+                    alpha *= 1.0 - (t - P.fadeStart) / (P.fadeEnd - P.fadeStart);
                 }
                 // Extras: sequential fade — gapIndex 0 (closest to the approaching
                 // kept char) fades first; farthest fades last. Only begins once the
