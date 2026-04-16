@@ -2302,36 +2302,37 @@
                 //   2. Negative leader-slow — leaders decelerate so trailers have more time
                 // The leader-slow scales with (1 − keptIndex/totalKept): full slow at
                 // keptIndex=0 (leader), zero at the last kept letter.
-                // Kept letters: boost + leader slow (only when transition active)
-                if (p.isKept && spellTransProgress > 0) {
-                    const ageBoost = (p.extrasBefore / p.totalChars) * p.segDuration * P.spellGrouping;
-                    const leaderSlow = (p.keptIndex === 0) ? P.spellLeaderSlow * p.segDuration : 0;
-                    const netBoost = spellTransProgress * (ageBoost - leaderSlow);
+                // Spelling-segment speed control: the WHOLE word decelerates
+                // (baseSlow), giving trailing letters time to spawn and catch up.
+                // On top of that deceleration, each letter gets an individual
+                // speedup proportional to how many phonetic extras precede it —
+                // so trailing kept letters close the gap while leading letters
+                // (with fewer extras) stay slow together at the front.
+                if (p.isKept !== undefined && spellTransProgress > 0) {
+                    const baseSlow = P.spellLeaderSlow * p.segDuration;
+                    let boost = 0;
+                    if (p.isKept === true) {
+                        boost = (p.extrasBefore / p.totalChars) * p.segDuration * P.spellGrouping;
+                    } else if (p.prevKeptExtrasBefore > 0) {
+                        boost = (p.prevKeptExtrasBefore / p.totalChars) * p.segDuration * P.spellGrouping;
+                    }
+                    const netBoost = spellTransProgress * (boost - baseSlow);
                     linearT = Math.min(Math.max(0, (age * fontSpeedScale + netBoost) / P.charLifetime), 1.0);
-                    if (spellTransProgress < 1 && linearT > P.fadeStart) {
+                    if (p.isKept && spellTransProgress < 1 && linearT > P.fadeStart) {
                         linearT = P.fadeStart;
                     }
                     t = easeBlended(linearT, P.linearBlend);
                 }
-                // Ordering clamp for kept letters — runs ALWAYS (not gated on
-                // spellTransProgress) so that young letters at natural speed can't
-                // outrun the decelerating leader before their own transition starts.
-                if (p.isKept !== undefined && p.isKept) {
+
+                // Ordering clamp: no letter in a spelling segment can overtake
+                // the one processed before it. Runs ALWAYS (not gated on progress)
+                // so young letters at natural speed can't outrun the decelerating
+                // group. segPrevKeptT tracks the previous letter's t (kept OR extra).
+                if (p.isKept !== undefined) {
                     if (p.segIdx in segPrevKeptT && t > segPrevKeptT[p.segIdx]) {
                         t = segPrevKeptT[p.segIdx];
                     }
                     segPrevKeptT[p.segIdx] = t;
-                }
-
-                // Extras: follow their preceding kept letter (ahead, speeding away)
-                if (p.isKept === false && p.prevKeptExtrasBefore > 0 && spellTransProgress > 0) {
-                    const prevKeptBoost = spellTransProgress * (p.prevKeptExtrasBefore / p.totalChars) * p.segDuration * P.spellGrouping;
-                    linearT = Math.min((age * fontSpeedScale + prevKeptBoost) / P.charLifetime, 1.0);
-                    t = easeBlended(linearT, P.linearBlend);
-                }
-                // Extras ordering clamp — also always runs
-                if (p.isKept === false && p.segIdx in segPrevKeptT && t > segPrevKeptT[p.segIdx]) {
-                    t = segPrevKeptT[p.segIdx];
                 }
 
                 // Word-gap offset: post-space letters nudged forward on the spline.
