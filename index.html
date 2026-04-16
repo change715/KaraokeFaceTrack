@@ -2266,6 +2266,12 @@
                     const spawnGapSec = p.segDuration / p.totalChars;
                     const ageBoost = spellTransProgress * delta * spawnGapSec * fontSpeedScale * P.spellGrouping;
                     linearT = Math.min(Math.max(0, (age * fontSpeedScale + ageBoost) / P.charLifetime), 1.0);
+                    // Monotonic-forward guard: never let a letter step backward on the spline.
+                    // First frame: p._prevLinearT is undefined → treat as 0.
+                    if (p._prevLinearT !== undefined && linearT < p._prevLinearT) {
+                        linearT = p._prevLinearT;
+                    }
+                    p._prevLinearT = linearT;
                     if (spellTransProgress < 1 && linearT > P.fadeStart) {
                         linearT = P.fadeStart;
                     }
