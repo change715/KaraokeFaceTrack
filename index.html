@@ -2321,8 +2321,18 @@
                 const uniformBaseT = t + (leaderT - t) * P.kerningUniformity;
                 const kerningRampLinear = Math.max(0, Math.min(1, t / Math.max(0.001, P.kerningReach)));
                 const kerningRamp = kerningRampLinear * kerningRampLinear * (3 - 2 * kerningRampLinear);
+                // During spelling transition, kept letters migrate their kerning
+                // index from phonetic position (wordIndexInWord) to final-word
+                // position (keptIndex) — otherwise letters like the trailing 'h'
+                // in "Haaaalleeluuuuuuujaaaah" (wordIdx=22) get pushed way behind
+                // the leader by letterKerning and never catch up.
+                let effectiveWordIdx = p.wordIndexInWord;
+                if (p.isKept === true && spellTransProgress > 0) {
+                    const kSmoothed = spellTransProgress * spellTransProgress * (3 - 2 * spellTransProgress);
+                    effectiveWordIdx = p.wordIndexInWord + (p.keptIndex - p.wordIndexInWord) * kSmoothed;
+                }
                 const tWithGap = Math.min(1,
-                    uniformBaseT + p.numSpacesBefore * P.wordGap + p.wordIndexInWord * P.letterKerning * kerningRamp);
+                    uniformBaseT + p.numSpacesBefore * P.wordGap + effectiveWordIdx * P.letterKerning * kerningRamp);
 
                 // Use the SEGMENT's shared spline (if available) so post-burst
                 // letters all ride the same track — prevents overlap when head moves.
