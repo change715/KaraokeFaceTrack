@@ -2304,7 +2304,10 @@
                 // keptIndex=0 (leader), zero at the last kept letter.
                 if (p.isKept && spellTransProgress > 0) {
                     const ageBoost = (p.extrasBefore / p.totalChars) * p.segDuration * P.spellGrouping;
-                    const leaderSlow = P.spellLeaderSlow * p.segDuration * (1 - p.keptIndex / Math.max(1, p.totalKept - 1));
+                    // Only the leader (keptIndex=0) decelerates — other letters catch
+                    // up via their extrasBefore boost and the ordering clamp prevents
+                    // them from passing letters ahead.
+                    const leaderSlow = (p.keptIndex === 0) ? P.spellLeaderSlow * p.segDuration : 0;
                     const netBoost = spellTransProgress * (ageBoost - leaderSlow);
                     linearT = Math.min(Math.max(0, (age * fontSpeedScale + netBoost) / P.charLifetime), 1.0);
                     if (spellTransProgress < 1 && linearT > P.fadeStart) {
@@ -2327,6 +2330,12 @@
                     const prevKeptBoost = spellTransProgress * (p.prevKeptExtrasBefore / p.totalChars) * p.segDuration * P.spellGrouping;
                     linearT = Math.min((age * fontSpeedScale + prevKeptBoost) / P.charLifetime, 1.0);
                     t = easeBlended(linearT, P.linearBlend);
+                }
+                // Extras ordering clamp: an extra must never overtake its preceding
+                // kept letter. segPrevKeptT holds that kept letter's t because
+                // particles are processed in spawn order.
+                if (p.isKept === false && p.segIdx in segPrevKeptT && t > segPrevKeptT[p.segIdx]) {
+                    t = segPrevKeptT[p.segIdx];
                 }
 
                 // Word-gap offset: post-space letters nudged forward on the spline.
