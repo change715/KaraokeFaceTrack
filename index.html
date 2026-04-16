@@ -2254,11 +2254,16 @@
                     spellTransProgress = segSpellProgress[p.segIdx] || 0;
                 }
 
-                // Kept letter: pull forward by its leading extras so the group
-                // bunches up into the final word as transition progresses.
-                if (p.isKept && spellTransProgress > 0 && p.extrasBefore > 0) {
-                    const ageBoost = spellTransProgress * (p.extrasBefore / p.totalChars) * p.segDuration * P.spellGrouping;
-                    linearT = Math.min((age * fontSpeedScale + ageBoost) / P.charLifetime, 1.0);
+                // Kept letter: center-anchored age boost. delta = keptIndex − midKeptIndex.
+                // Leaders (delta<0) slow; trailers (delta>0) speed up; middle stays natural.
+                // fontSpeedScale is required for the boost to actually land at the
+                // fontSpeedScale-accelerated linearT rate.
+                if (p.isKept && spellTransProgress > 0) {
+                    const midIdx = segMidKeptIndex[p.segIdx] || 0;
+                    const delta = p.keptIndex - midIdx;
+                    const spawnGapSec = p.segDuration / p.totalChars;
+                    const ageBoost = spellTransProgress * delta * spawnGapSec * fontSpeedScale * P.spellGrouping;
+                    linearT = Math.min(Math.max(0, (age * fontSpeedScale + ageBoost) / P.charLifetime), 1.0);
                     if (spellTransProgress < 1 && linearT > P.fadeStart) {
                         linearT = P.fadeStart;
                     }
