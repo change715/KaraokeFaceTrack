@@ -2316,7 +2316,10 @@
                     } else if (p.prevKeptExtrasBefore > 0) {
                         boost = (p.prevKeptExtrasBefore / p.totalChars) * p.segDuration * P.spellGrouping;
                     }
-                    const netBoost = spellTransProgress * (boost - baseSlow);
+                    // Smoothstep on progress: zero derivative at onset and completion
+                    // so the deceleration/speedup ramps in and out gently.
+                    const smoothProg = spellTransProgress * spellTransProgress * (3 - 2 * spellTransProgress);
+                    const netBoost = smoothProg * (boost - baseSlow);
                     linearT = Math.min(Math.max(0, (age * fontSpeedScale + netBoost) / P.charLifetime), 1.0);
                     if (p.isKept && spellTransProgress < 1 && linearT > P.fadeStart) {
                         linearT = P.fadeStart;
@@ -2324,13 +2327,14 @@
                     t = easeBlended(linearT, P.linearBlend);
                 }
 
-                // Ordering clamp: no letter in a spelling segment can overtake
-                // the one processed before it. Runs ALWAYS (not gated on progress)
-                // so young letters at natural speed can't outrun the decelerating
-                // group. segPrevKeptT tracks the previous letter's t (kept OR extra).
+                // Ordering clamp: no letter can overtake the one ahead. A small
+                // minimum gap prevents letters from stacking at the exact same
+                // position — they decelerate smoothly as they approach rather
+                // than hard-snapping to a stop.
                 if (p.isKept !== undefined) {
-                    if (p.segIdx in segPrevKeptT && t > segPrevKeptT[p.segIdx]) {
-                        t = segPrevKeptT[p.segIdx];
+                    if (p.segIdx in segPrevKeptT) {
+                        const ceiling = segPrevKeptT[p.segIdx] - 0.003;
+                        if (t > ceiling) t = ceiling;
                     }
                     segPrevKeptT[p.segIdx] = t;
                 }
