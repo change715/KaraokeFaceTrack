@@ -2431,12 +2431,15 @@
                 // Spelling letters use an earlier fade start (tied to spellTransEnd)
                 // so they begin fading shortly after transition completes instead
                 // of lingering at full alpha until the global fadeStart.
-                const inSpellTransition = p.isKept !== undefined && spellTransProgress < 1;
+                // Spelling segments: age-based fade starting shortly after transition
+                // completes (transEndLT + 0.05). No guard needed — effectiveFadeStart
+                // is set high enough that fade begins after transition naturally ends.
+                // Normal lyrics: position-based fade at user's fadeStart.
                 const isSpell = p.isKept !== undefined;
                 const fadeRef = isSpell ? baseLinearT : t;
                 const transEndLT = 1 - Math.sqrt(1 - P.spellTransEnd);
                 const effectiveFadeStart = isSpell ? (transEndLT + 0.05) : P.fadeStart;
-                if (fadeRef > effectiveFadeStart && !inSpellTransition) {
+                if (fadeRef > effectiveFadeStart) {
                     alpha *= 1.0 - (fadeRef - effectiveFadeStart) / (P.fadeEnd - effectiveFadeStart);
                 }
                 // Extras: sequential fade — gapIndex 0 (closest to the approaching
