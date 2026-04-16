@@ -516,6 +516,7 @@
             html += `</div>`;
             html += `<button class="tweak-btn" id="grid-toggle-btn">Show Output Grid</button>`;
             html += `<button class="tweak-btn" id="tracking-dot-btn">Show Tracking Dot</button>`;
+            html += `<button class="tweak-btn" id="debug-mode-btn">${debugMode ? 'Debug Mode: ON' : 'Debug Mode: OFF'}</button>`;
             html += `<button class="tweak-btn" id="set-defaults-btn">Set Current as Default</button>`;
             html += `<button class="tweak-btn" id="reset-defaults-btn" style="color:#ff8888;border-color:rgba(255,136,136,0.4);background:rgba(255,136,136,0.1)">Reset to Original Defaults</button>`;
             html += `<button class="tweak-btn" id="hide-ui-btn" style="color:#ffcc66;border-color:rgba(255,204,102,0.4);background:rgba(255,204,102,0.1)">Hide UI (Press 1)</button>`;
@@ -601,6 +602,13 @@
             document.getElementById('tracking-dot-btn').addEventListener('click', () => {
                 showTrackingDot = !showTrackingDot;
                 document.getElementById('tracking-dot-btn').textContent = showTrackingDot ? 'Hide Tracking Dot' : 'Show Tracking Dot';
+            });
+
+            // Debug-mode toggle: bypass webcam and synthesize mouth/head pose.
+            document.getElementById('debug-mode-btn').addEventListener('click', () => {
+                debugMode = !debugMode;
+                document.getElementById('debug-mode-btn').textContent = debugMode ? 'Debug Mode: ON' : 'Debug Mode: OFF';
+                log('Debug mode: ' + (debugMode ? 'ON' : 'OFF'));
             });
 
             // Rebuild the corner/point selector dropdown for current sub-mode
