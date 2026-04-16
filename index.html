@@ -302,7 +302,7 @@
         // Hardcoded fallback defaults
         const P_HARDCODED = {
             charSize:170, depthScale:0.10, depthFullAt:0.77, depthEaseIn:3.80, depthEaseOut:2, charLifetime:12, noiseAmp:0, noiseFreq:0.50,
-            mouthSmooth:0.8, fadeInStart:0, fadeInEnd:0.05,
+            mouthSmooth:0.8, fadeInStart:0, fadeInEnd:0.05, edgeFadeLeft:200,
             cp1Along:-0.5, cp1Perp:0.48, cp2Along:0.19, cp2Perp:0.24,
             midX:0.15, midY:0.35, midTanIn:0.65, midTanInAngle:0, midTanOut:0.65, midTanOutAngle:0, useMidpoint:1,
             targetX:0, targetY:0.2, targetYTrack:0.35, trackGrace:2, wordGap:0.1, letterKerning:0, kerningReach:0.3, kerningUniformity:0,
@@ -368,8 +368,9 @@
                 { key: 'noiseFreq',    label: 'Noise freq',    min: 0.5, max: 8, step: 0.1 },
                 { key: 'fadeInStart',  label: 'Fade-in start', min: 0, max: 0.5, step: 0.01 },
                 { key: 'fadeInEnd',    label: 'Fade-in end',   min: 0.01, max: 0.5, step: 0.01 },
-                { key: 'fadeStart',   label: 'Fade-out start', min: 0.1, max: 0.9, step: 0.01 },
+                { key: 'fadeStart',   label: 'Fade-out start', min: 0.1, max: 1.0, step: 0.01 },
                 { key: 'fadeEnd',     label: 'Fade-out end',   min: 0.3, max: 1.0, step: 0.01 },
+                { key: 'edgeFadeLeft', label: 'Edge fade left (px)', min: 0, max: 600, step: 10 },
                 { key: 'minCharScale', label: 'Min char size %', min: 0.3, max: 1.0, step: 0.01 },
                 { key: 'scaleNormAt', label: 'Scale norm at (t)', min: 0.05, max: 1.0, step: 0.01 },
                 { key: 'linearBlend', label: 'Linear blend at', min: 0.3, max: 1.0, step: 0.01 },
@@ -2407,6 +2408,14 @@
                     }
                     alpha *= Math.pow(1.0 - extraFadeProgress, P.spellFadeSpeed);
                 }
+                // Screen-space left-edge opacity mask: letters fade linearly
+                // from 0 at x=0 to full alpha at x=edgeFadeLeft. Acts like a
+                // gradient wipe on the left side of the output — letters smoothly
+                // disappear as they exit left regardless of spline shape.
+                if (P.edgeFadeLeft > 0 && pos.x < P.edgeFadeLeft) {
+                    alpha *= Math.max(0, pos.x / P.edgeFadeLeft);
+                }
+
                 alpha = Math.max(0, Math.min(1, alpha));
                 if (alpha <= 0) continue;
 
