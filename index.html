@@ -306,7 +306,7 @@
             cp1Along:-0.5, cp1Perp:0.48, cp2Along:0.19, cp2Perp:0.24,
             midX:0.15, midY:0.35, midTanIn:0.65, midTanInAngle:0, midTanOut:0.65, midTanOutAngle:0, useMidpoint:1,
             targetX:0, targetY:0.2, targetYTrack:0.35, trackGrace:2, wordGap:0.1, letterKerning:0, kerningReach:0.3, kerningUniformity:0,
-            spellTransStart:0.18, spellTransEnd:0.44, spellFadeSpeed:3.80, spellGrouping:1.70,
+            spellTransStart:0.18, spellTransEnd:0.44, spellFadeSpeed:3.80, spellGrouping:1.70, spellLeaderSlow:0.30,
             colorStartR:255, colorStartG:255, colorStartB:255,
             colorEndR:220, colorEndG:50, colorEndB:50,
             burstDistance:300, burstDuration:0.12, dirSensitivity:0.15, dirBiasX:0, targetNoise:60,
@@ -384,6 +384,7 @@
                 { key: 'spellTransStart', label: 'Trans start (t)', min: 0.05, max: 0.8, step: 0.01 },
                 { key: 'spellTransEnd',   label: 'Trans end (t)',   min: 0.1,  max: 0.9, step: 0.01 },
                 { key: 'spellFadeSpeed',  label: 'Extra fade speed', min: 0.2, max: 5.0, step: 0.1 },
+                { key: 'spellLeaderSlow', label: 'Leader slow',     min: 0.0, max: 1.0, step: 0.05 },
                 { accordionEnd: true },
                 { accordion: 'Burst' },
                 { key: 'burstDistance', label: 'Burst dist (px)', min: 10, max: 600, step: 5 },
@@ -2292,12 +2293,16 @@
                         (baseT - P.spellTransStart) / (P.spellTransEnd - P.spellTransStart)));
                 }
 
-                // Kept letters: age-boost proportional to leading extras. Letters
-                // that spawned after more phonetic extras speed up more, so they
-                // catch the leader to form the final word with consistent kerning.
-                if (p.isKept && spellTransProgress > 0 && p.extrasBefore > 0) {
-                    const ageBoost = spellTransProgress * (p.extrasBefore / p.totalChars) * p.segDuration * P.spellGrouping;
-                    linearT = Math.min((age * fontSpeedScale + ageBoost) / P.charLifetime, 1.0);
+                // Kept letters: two opposing forces that compress the word.
+                //   1. Positive age-boost (extrasBefore) — trailers speed up to catch leader
+                //   2. Negative leader-slow — leaders decelerate so trailers have more time
+                // The leader-slow scales with (1 − keptIndex/totalKept): full slow at
+                // keptIndex=0 (leader), zero at the last kept letter.
+                if (p.isKept && spellTransProgress > 0) {
+                    const ageBoost = (p.extrasBefore / p.totalChars) * p.segDuration * P.spellGrouping;
+                    const leaderSlow = P.spellLeaderSlow * p.segDuration * (1 - p.keptIndex / Math.max(1, p.totalKept - 1));
+                    const netBoost = spellTransProgress * (ageBoost - leaderSlow);
+                    linearT = Math.min(Math.max(0, (age * fontSpeedScale + netBoost) / P.charLifetime), 1.0);
                     if (spellTransProgress < 1 && linearT > P.fadeStart) {
                         linearT = P.fadeStart;
                     }
