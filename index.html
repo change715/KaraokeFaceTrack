@@ -2309,17 +2309,20 @@
                 // speedup proportional to how many phonetic extras precede it —
                 // so trailing kept letters close the gap while leading letters
                 // (with fewer extras) stay slow together at the front.
-                // Spelling speed modification — applies during burst AND spline.
-                // The slow extends the burst phase slightly (smoother transition
-                // to spline speed) instead of creating an abrupt speed change at
-                // the burst boundary. Multiplicative slow keeps linearT monotonically
-                // increasing — no backward motion or stopping.
-                if (p.isKept !== undefined && spellTransProgress > 0) {
+                // Spelling speed modification — only AFTER burst naturally completes.
+                // Slows the post-burst excess and ramps catchup from zero at burst-
+                // end to full over the letter's life, so there's no position jump
+                // at the burst-to-spline boundary and no backward motion.
+                if (p.isKept !== undefined && spellTransProgress > 0 && linearT >= P.burstDuration) {
+                    // Cubic ramp for deceleration (very gradual onset),
+                    // smoothstep for catchup (engages slightly faster).
                     const slowRamp = spellTransProgress * spellTransProgress * spellTransProgress;
                     const catchupRamp = spellTransProgress * spellTransProgress * (3 - 2 * spellTransProgress);
                     const slowMul = 1 - slowRamp * P.spellLeaderSlow;
                     const catchup = (p.charIndex / Math.max(1, p.totalChars - 1)) * p.segDuration * P.spellGrouping;
-                    linearT = Math.min((age * fontSpeedScale * slowMul + catchupRamp * catchup) / P.charLifetime, 1.0);
+                    const excess = linearT - P.burstDuration;
+                    const excessFrac = excess / Math.max(0.001, 1 - P.burstDuration);
+                    linearT = Math.min(P.burstDuration + excess * slowMul + catchupRamp * catchup / P.charLifetime * excessFrac, 1.0);
                     if (p.isKept && spellTransProgress < 1 && linearT > P.fadeStart) {
                         linearT = P.fadeStart;
                     }
