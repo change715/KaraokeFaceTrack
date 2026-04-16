@@ -2321,15 +2321,24 @@
                 const uniformBaseT = t + (leaderT - t) * P.kerningUniformity;
                 const kerningRampLinear = Math.max(0, Math.min(1, t / Math.max(0.001, P.kerningReach)));
                 const kerningRamp = kerningRampLinear * kerningRampLinear * (3 - 2 * kerningRampLinear);
-                // During spelling transition, kept letters migrate their kerning
-                // index from phonetic position (wordIndexInWord) to final-word
-                // position (keptIndex) — otherwise letters like the trailing 'h'
-                // in "Haaaalleeluuuuuuujaaaah" (wordIdx=22) get pushed way behind
-                // the leader by letterKerning and never catch up.
+                // During spelling transition, letters migrate their kerning index
+                // from the phonetic position (wordIndexInWord) toward the final-word
+                // position. Kept letters target their own keptIndex; extras target
+                // their preceding kept letter's keptIndex (they're being absorbed
+                // into that kept letter as they fade). Without migrating extras too,
+                // kept letters would slide past still-visible extras on the spline.
                 let effectiveWordIdx = p.wordIndexInWord;
-                if (p.isKept === true && spellTransProgress > 0) {
+                if (spellTransProgress > 0) {
                     const kSmoothed = spellTransProgress * spellTransProgress * (3 - 2 * spellTransProgress);
-                    effectiveWordIdx = p.wordIndexInWord + (p.keptIndex - p.wordIndexInWord) * kSmoothed;
+                    let targetIdx = null;
+                    if (p.isKept === true) {
+                        targetIdx = p.keptIndex;
+                    } else if (p.isKept === false && p.prevKeptIndex >= 0) {
+                        targetIdx = p.prevKeptIndex;
+                    }
+                    if (targetIdx !== null) {
+                        effectiveWordIdx = p.wordIndexInWord + (targetIdx - p.wordIndexInWord) * kSmoothed;
+                    }
                 }
                 const tWithGap = Math.min(1,
                     uniformBaseT + p.numSpacesBefore * P.wordGap + effectiveWordIdx * P.letterKerning * kerningRamp);
