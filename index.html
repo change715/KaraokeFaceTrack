@@ -2320,6 +2320,18 @@
                     spellTransProgress = segSpellProgress[p.segIdx] || 0;
                 }
 
+                // Per-letter progress for the extras sequential fade.
+                // The shared progress above saturates at 1 before most extras have
+                // even spawned, which makes all of them pass the keptSpawned gate
+                // at the same moment and fade together. A per-letter progress keeps
+                // each extra's fade window anchored to its own age, so extras fade
+                // sequentially as each one matures.
+                let extraFadeProgressT = 0;
+                if (p.isKept === false) {
+                    extraFadeProgressT = Math.max(0, Math.min(1,
+                        (baseT - P.spellTransStart) / (P.spellTransEnd - P.spellTransStart)));
+                }
+
                 // Direct t-override collapse. Each kept letter targets
                 //   targetT = leaderT − smoothed×spellBrake − anchorKeptIndex × finalWordKerning
                 // The spellBrake term pulls the WHOLE word (including the leader)
@@ -2393,18 +2405,14 @@
                 if (t < P.fadeInEnd) {
                     alpha = t <= P.fadeInStart ? 0 : (t - P.fadeInStart) / (P.fadeInEnd - P.fadeInStart);
                 }
-                // Smoothly ramp fade in as progress advances — avoids the abrupt
-                // alpha pop that happened when inSpellTransition=false flipped
-                // at progress=1 and a letter already well past fadeStart instantly
-                // jumped to its natural alpha.
-                if (t > P.fadeStart) {
-                    const naturalFade = 1.0 - (t - P.fadeStart) / (P.fadeEnd - P.fadeStart);
-                    if (p.isKept !== undefined) {
-                        const fadeInfluence = spellTransProgress * spellTransProgress * (3 - 2 * spellTransProgress);
-                        alpha *= 1 + (naturalFade - 1) * fadeInfluence;
-                    } else {
-                        alpha *= naturalFade;
-                    }
+                // Kept letters + extras are held at full alpha while the segment's
+                // spelling transition is in progress — the word shouldn't fade while
+                // it's still forming. Once progress saturates at 1, fade kicks in
+                // normally based on t. (Tune fadeStart to be >= spellTransEnd to
+                // avoid a visible pop when the guard releases.)
+                const inSpellTransition = p.isKept !== undefined && spellTransProgress < 1;
+                if (t > P.fadeStart && !inSpellTransition) {
+                    alpha *= 1.0 - (t - P.fadeStart) / (P.fadeEnd - P.fadeStart);
                 }
                 // Extras: sequential fade — gapIndex 0 (closest to the approaching
                 // kept char) fades first; farthest fades last. Only begins once the
@@ -2415,13 +2423,13 @@
                     const keptSpawned = p.nextKeptCharIndex > 0 &&
                         (age - (p.nextKeptCharIndex - p.charIndex) * spawnGapSec) > 0;
 
-                    if (keptSpawned && spellTransProgress > 0) {
+                    if (keptSpawned && extraFadeProgressT > 0) {
                         const fs = p.gapIndex / p.gapSize;
                         const fe = (p.gapIndex + 1) / p.gapSize;
-                        extraFadeProgress = Math.max(0, Math.min(1, (spellTransProgress - fs) / (fe - fs)));
-                    } else if (!p.nextKeptCharIndex && spellTransProgress > 0.5) {
+                        extraFadeProgress = Math.max(0, Math.min(1, (extraFadeProgressT - fs) / (fe - fs)));
+                    } else if (!p.nextKeptCharIndex && extraFadeProgressT > 0.5) {
                         // Trailing extras (no next kept char): fade in second half
-                        extraFadeProgress = (spellTransProgress - 0.5) * 2;
+                        extraFadeProgress = (extraFadeProgressT - 0.5) * 2;
                     }
                     alpha *= Math.pow(1.0 - extraFadeProgress, P.spellFadeSpeed);
                 }
