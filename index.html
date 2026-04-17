@@ -1950,6 +1950,21 @@
                     dirX = -1; dirY = -0.2; dirLen = Math.sqrt(dirX * dirX + dirY * dirY);
                 }
                 dirX /= dirLen; dirY /= dirLen;
+                // Prevent burst from opposing the spline direction. Compute
+                // rough start-to-target vector; if burst has a component going
+                // AWAY from the target, remove it (keep only perpendicular).
+                // This stops letters from taking a long U-turn route.
+                const roughTargetX = Math.min(mouthX - canvas.width * 0.5, canvas.width * P.targetX) - mouthX;
+                const roughTargetY = canvas.height * P.targetY - mouthY;
+                const rtLen = Math.sqrt(roughTargetX * roughTargetX + roughTargetY * roughTargetY) || 1;
+                const rtNx = roughTargetX / rtLen, rtNy = roughTargetY / rtLen;
+                const dot = dirX * rtNx + dirY * rtNy;
+                if (dot < 0) {
+                    dirX -= dot * rtNx;
+                    dirY -= dot * rtNy;
+                    const fixedLen = Math.sqrt(dirX * dirX + dirY * dirY) || 1;
+                    dirX /= fixedLen; dirY /= fixedLen;
+                }
                 // Small sequential perpendicular offset so chars don't stack perfectly
                 // but remain lined up in the burst direction
                 const baseAngle = Math.atan2(dirY, dirX);
