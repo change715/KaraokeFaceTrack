@@ -2324,9 +2324,17 @@
                     // smoothstep for catchup (engages slightly faster).
                     const slowRamp = spellTransProgress * spellTransProgress * spellTransProgress;
                     const catchupRamp = spellTransProgress * spellTransProgress * (3 - 2 * spellTransProgress);
-                    const slowMul = 1 - slowRamp * P.spellLeaderSlow;
+                    const targetSlowMul = 1 - slowRamp * P.spellLeaderSlow;
                     const catchup = (p.charIndex / Math.max(1, p.totalChars - 1)) * p.segDuration * P.spellGrouping;
-                    const excess = linearT - P.burstDuration;
+                    // Use UNCLAMPED natural linearT so excess isn't capped at
+                    // 1.0 - burstDuration. Without this, the initial Math.min(…,1.0)
+                    // on linearT prevents letters from ever reaching the spline end.
+                    const naturalLT = age * fontSpeedScale / P.charLifetime;
+                    const excess = naturalLT - P.burstDuration;
+                    // Ease the slow factor in over the first 0.1 of excess so letters
+                    // don't abruptly drop from 100% speed to 65% at the burst boundary.
+                    const easeIn = Math.min(1, excess / 0.1);
+                    const slowMul = 1 - easeIn * (1 - targetSlowMul);
                     // Square-root ramp: much faster than linear early on (12% at
                     // excessFrac=0.01 vs 1.5%), so trailing letters get meaningful
                     // catchup right after burst. Still 0 at burst boundary (no jump).
