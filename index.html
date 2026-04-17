@@ -2262,7 +2262,13 @@
         const segAvgSmoothed = {}; // persistent smoothed avg size per segment
         function renderParticles(nowMs) {
             const nowSec = nowMs / 1000;
-            particles = particles.filter(p => (nowSec - p.spawnTime) < P.charLifetime);
+            // Spelling-segment letters get extended lifetime to compensate for
+            // deceleration — they move slower so need more time to travel the
+            // full spline and exit off-screen.
+            particles = particles.filter(p => {
+                const lifetime = (p.isKept !== undefined) ? P.charLifetime / Math.max(0.1, 1 - P.spellLeaderSlow) : P.charLifetime;
+                return (nowSec - p.spawnTime) < lifetime;
+            });
 
             const fontSpeedScale = Math.max(1, P.charSize / 80);
             const doAutoScale = P.minCharScale < 1.0;
@@ -2318,17 +2324,7 @@
                     // smoothstep for catchup (engages slightly faster).
                     const slowRamp = spellTransProgress * spellTransProgress * spellTransProgress;
                     const catchupRamp = spellTransProgress * spellTransProgress * (3 - 2 * spellTransProgress);
-                    let slowMul = 1 - slowRamp * P.spellLeaderSlow;
-                    // Release the deceleration as the letter starts fading, so it
-                    // accelerates back to natural speed and exits off-screen instead
-                    // of getting stuck mid-spline. Without this, strong leaderSlow
-                    // values make letters die before reaching the spline endpoint.
-                    const transEndLT = 1 - Math.sqrt(1 - P.spellTransEnd);
-                    const fadeOnset = transEndLT + 0.05;
-                    if (baseLinearT > fadeOnset) {
-                        const release = Math.min(1, (baseLinearT - fadeOnset) / 0.15);
-                        slowMul = slowMul + (1 - slowMul) * release;
-                    }
+                    const slowMul = 1 - slowRamp * P.spellLeaderSlow;
                     const catchup = (p.charIndex / Math.max(1, p.totalChars - 1)) * p.segDuration * P.spellGrouping;
                     const excess = linearT - P.burstDuration;
                     // Square-root ramp: much faster than linear early on (12% at
