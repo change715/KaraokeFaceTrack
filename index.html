@@ -473,6 +473,7 @@
                 </div>`;
             }
             html += `<div style="display:flex;gap:6px;margin:10px 0 4px 0"><button class="tweak-btn" id="play-btn" style="margin:0;flex:1">Play</button><button class="tweak-btn" id="pause-btn" style="margin:0;flex:1">Pause</button><button class="tweak-btn" id="restart-btn" style="margin:0;flex:1">Restart</button></div>`;
+            html += `<div style="display:flex;gap:6px;align-items:center;margin:6px 0"><label style="flex:0 0 auto;opacity:0.8;font-size:0.78rem">Jump to</label><input type="number" id="jump-min" min="0" max="99" value="1" style="width:44px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.25);border-radius:4px;color:#fff;text-align:center;font-size:0.75rem;font-family:monospace;padding:3px 4px"><span style="opacity:0.6;font-size:0.72rem">m</span><input type="number" id="jump-sec" min="0" max="59" value="21" style="width:44px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.25);border-radius:4px;color:#fff;text-align:center;font-size:0.75rem;font-family:monospace;padding:3px 4px"><span style="opacity:0.6;font-size:0.72rem">s</span><button class="tweak-btn" id="jump-btn" style="margin:0;flex:0 0 auto;padding:6px 12px">Go</button></div>`;
             html += `<button class="tweak-btn" id="flip-lyrics-btn">Flip Lyrics Horizontally</button>`;
             html += `<button class="tweak-btn" id="mirror-cam-btn">${P.cameraMirrored ? 'Unmirror Camera' : 'Mirror Camera'}</button>`;
             html += `<button class="tweak-btn" id="input-grid-btn">Show Input Grid</button>`;
@@ -530,6 +531,16 @@
             });
             document.getElementById('restart-btn').addEventListener('click', () => {
                 audio.currentTime = 0;
+                particles.length = 0;
+                lastSegmentIndex = -1;
+                charSpawnIndex = 0;
+                subtitleData = null;
+                if (running) audio.play().catch(e => log('Audio error: ' + e.message));
+            });
+            document.getElementById('jump-btn').addEventListener('click', () => {
+                const m = parseInt(document.getElementById('jump-min').value) || 0;
+                const s = parseInt(document.getElementById('jump-sec').value) || 0;
+                audio.currentTime = m * 60 + s;
                 particles.length = 0;
                 lastSegmentIndex = -1;
                 charSpawnIndex = 0;
@@ -1696,7 +1707,7 @@
                     seed: Math.random() * 100,
                     burstDx: Math.cos(burstAngle),
                     burstDy: Math.sin(burstAngle),
-                    facingRight: faceYaw > 0,
+                    facingRight: dirX > 0,
                 });
                 charSpawnIndex++;
             }
@@ -1846,10 +1857,12 @@
             const W = canvas.width, H = canvas.height;
             // Draw a few sample splines from the current mouth position with varying seeds
             const seeds = [0, 15, 30, 50, 70, 85];
+            const vizDirLen = Math.sqrt(faceYaw*faceYaw + facePitch*facePitch);
+            const vizFacingRight = vizDirLen >= 0.15 && faceYaw > 0;
             ctx.save();
             for (let si = 0; si < seeds.length; si++) {
                 const seed = seeds[si];
-                const fakeP = { startX: mouthX, startY: mouthY, seed, facingRight: faceYaw > 0 };
+                const fakeP = { startX: mouthX, startY: mouthY, seed, facingRight: vizFacingRight };
                 // Sample the cubic bezier path
                 const steps = 40;
                 ctx.beginPath();
@@ -1866,13 +1879,12 @@
 
                 // Draw control points for the first spline
                 if (si === 0) {
-                    const vizMirror = faceYaw > 0;
-                    const vizPerpSign = vizMirror ? -1 : 1;
-                    const tx = vizMirror ? W * (1 - P.targetX) : W * P.targetX;
+                    const vizPerpSign = vizFacingRight ? -1 : 1;
+                    const tx = vizFacingRight ? W * (1 - P.targetX) : W * P.targetX;
                     const tyBase = H * P.targetY;
                     const targetOffset = (Math.sin(seed * 7.13) * 0.5 + Math.sin(seed * 3.71) * 0.3 + Math.sin(seed * 11.3) * 0.2) * P.targetNoise;
                     const ty = tyBase + targetOffset;
-                    const mx = vizMirror ? W * (1 - P.midX) : W * P.midX, my = H * P.midY;
+                    const mx = vizFacingRight ? W * (1 - P.midX) : W * P.midX, my = H * P.midY;
                     // Segment 1: start → mid
                     const dx1 = mx - fakeP.startX, dy1 = my - fakeP.startY;
                     const len1 = Math.sqrt(dx1*dx1 + dy1*dy1) || 1;
