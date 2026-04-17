@@ -2318,7 +2318,17 @@
                     // smoothstep for catchup (engages slightly faster).
                     const slowRamp = spellTransProgress * spellTransProgress * spellTransProgress;
                     const catchupRamp = spellTransProgress * spellTransProgress * (3 - 2 * spellTransProgress);
-                    const slowMul = 1 - slowRamp * P.spellLeaderSlow;
+                    let slowMul = 1 - slowRamp * P.spellLeaderSlow;
+                    // Release the deceleration as the letter starts fading, so it
+                    // accelerates back to natural speed and exits off-screen instead
+                    // of getting stuck mid-spline. Without this, strong leaderSlow
+                    // values make letters die before reaching the spline endpoint.
+                    const transEndLT = 1 - Math.sqrt(1 - P.spellTransEnd);
+                    const fadeOnset = transEndLT + 0.05;
+                    if (baseLinearT > fadeOnset) {
+                        const release = Math.min(1, (baseLinearT - fadeOnset) / 0.15);
+                        slowMul = slowMul + (1 - slowMul) * release;
+                    }
                     const catchup = (p.charIndex / Math.max(1, p.totalChars - 1)) * p.segDuration * P.spellGrouping;
                     const excess = linearT - P.burstDuration;
                     // Square-root ramp: much faster than linear early on (12% at
