@@ -2325,7 +2325,9 @@
                     // excessFrac=0.01 vs 1.5%), so trailing letters get meaningful
                     // catchup right after burst. Still 0 at burst boundary (no jump).
                     const excessFrac = Math.sqrt(excess / Math.max(0.001, 1 - P.burstDuration));
-                    linearT = Math.min(P.burstDuration + excess * slowMul + catchupRamp * catchup / P.charLifetime * excessFrac, 1.0);
+                    // No upper clamp — let letters travel past the spline endpoint
+                    // so they can exit off-screen instead of piling up at t=1.
+                    linearT = P.burstDuration + excess * slowMul + catchupRamp * catchup / P.charLifetime * excessFrac;
                     t = easeBlended(linearT, P.linearBlend);
                 }
 
@@ -2385,8 +2387,10 @@
                     const kSmooth = spellTransProgress * spellTransProgress * (3 - 2 * spellTransProgress);
                     effectiveKerning = P.letterKerning + (P.finalWordKerning - P.letterKerning) * kSmooth;
                 }
-                const tWithGap = Math.min(1,
-                    uniformBaseT + p.numSpacesBefore * P.wordGap + effectiveWordIdx * effectiveKerning * kerningRamp);
+                // Spelling segments: no upper clamp so letters can travel past the
+                // spline endpoint and exit off-screen. Normal lyrics: clamp at 1.
+                const rawTWithGap = uniformBaseT + p.numSpacesBefore * P.wordGap + effectiveWordIdx * effectiveKerning * kerningRamp;
+                const tWithGap = isSpell ? rawTWithGap : Math.min(1, rawTWithGap);
 
                 // Use the SEGMENT's shared spline (if available) so post-burst
                 // letters all ride the same track — prevents overlap when head moves.
