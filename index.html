@@ -1963,12 +1963,22 @@
             const now = performance.now() / 1000;
             while (charSpawnIndex < charsToSpawn && charSpawnIndex < text.length) {
                 // Burst direction based on face yaw + pitch:
-                // Build a 2D direction vector from face orientation
-                // yaw: positive = facing right (screen), negative = facing left
+                // Build a 2D direction vector from face orientation.
+                // yaw:   positive = facing right (screen), negative = facing left
                 // pitch: positive = looking down, negative = looking up
-                // Mirror yaw for screen space (webcam is mirrored)
-                let dirX = faceYaw + P.dirBiasX;   // left/right (biased)
-                let dirY = facePitch; // up/down
+                //
+                // Two code-level biases to keep burst feeling horizontal:
+                // (1) yawBoost amplifies yaw so head turns dominate pitch noise
+                //     for clearly-directional bursts.
+                // (2) horizontalDefault ensures even a neutral face bursts right
+                //     (away from the target at screen-left), so the burst comes
+                //     "out and to the right" before the spline loops it back.
+                //     Face-left turns can still override by producing strong
+                //     negative faceYaw * yawBoost.
+                const yawBoost = 3.0;
+                const horizontalDefault = 0.3;
+                let dirX = faceYaw * yawBoost + P.dirBiasX + horizontalDefault;
+                let dirY = facePitch;
                 // Normalize; if face is nearly centered, default to left burst
                 let dirLen = Math.sqrt(dirX * dirX + dirY * dirY);
                 if (dirLen < P.dirSensitivity) {
@@ -1995,6 +2005,14 @@
                 const baseAngle = Math.atan2(dirY, dirX);
                 const indexOffset = (charSpawnIndex / Math.max(text.length - 1, 1) - 0.5) * 0.15;
                 const burstAngle = baseAngle + indexOffset;
+                // Extra impulse when head turns right (faceYaw > 0).
+                // Leftward turns unchanged. Scales burst magnitude up to 4×
+                // proportional to how far right the head has turned.
+                // Applied X-only at render (see burstX/burstY below), so the
+                // extra impulse stays horizontal and doesn't lift letters up.
+                const rightLook = Math.max(0, faceYaw);
+                const burstBoost = 1 + rightLook * 3.0;
+
                 const cm = currentSeg.charMap ? currentSeg.charMap[charSpawnIndex] : null;
                 particles.push({
                     char: text[charSpawnIndex],
@@ -2004,6 +2022,7 @@
                     seed: Math.random() * 100,
                     burstDx: Math.cos(burstAngle),
                     burstDy: Math.sin(burstAngle),
+                    burstBoost: burstBoost,
                     charIndex: charSpawnIndex,
                     totalChars: text.length,
 
@@ -2451,11 +2470,21 @@
                 let pos;
                 if (linearT < P.burstDuration) {
                     const burstT = linearT / P.burstDuration;
-                    // Smoothstep blend: 0→1 with zero derivative at both ends
-                    const blend = burstT * burstT * (3 - 2 * burstT);
+                    // Back-loaded blend (squared smoothstep): stays near 0 for
+                    // longer so the burst direction dominates more of the burst
+                    // phase — letters travel further out in the burst direction
+                    // before the spline pulls them back. Still C1-continuous at
+                    // both ends (zero derivative at burstT=0 and burstT=1).
+                    const ss = burstT * burstT * (3 - 2 * burstT);
+                    const blend = ss * ss;
                     // Burst from spawn-mouth (per-particle), toward segment spline
                     const burstEased = 1 - Math.pow(1 - burstT, 2);
-                    const burstX = p.startX + p.burstDx * P.burstDistance * burstEased;
+                    // Per-particle burstBoost (set at spawn from head yaw):
+                    // right-looking turns get extra HORIZONTAL burst magnitude
+                    // only — applied to X, not Y, so the extra impulse stays
+                    // horizontal instead of amplifying any upward lean.
+                    const bBoost = (p.burstBoost != null) ? p.burstBoost : 1;
+                    const burstX = p.startX + p.burstDx * P.burstDistance * bBoost * burstEased;
                     const burstY = p.startY + p.burstDy * P.burstDistance * burstEased;
                     pos = {
                         x: lerp(burstX, splinePos.x, blend),
