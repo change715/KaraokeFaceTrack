@@ -2439,16 +2439,7 @@
                 // Fall back to per-particle spline if segment spline wasn't baked.
                 const seg = lyricsData[p.segIdx];
                 let splinePos;
-                // Use the shared segment spline only if this particle spawned
-                // close to it. For long segments where the mouth drifts, far-away
-                // particles would otherwise have to take a huge diagonal during
-                // burst to reach the shared spline — looking like a "loop."
-                // Threshold: 20% of canvas width.
-                const sharedDx = seg._splineP ? (p.startX - seg._splineP.startX) : 0;
-                const sharedDy = seg._splineP ? (p.startY - seg._splineP.startY) : 0;
-                const distFromShared = Math.sqrt(sharedDx * sharedDx + sharedDy * sharedDy);
-                const sharedThreshold = canvas.width * 0.2;
-                if (seg._splineP && seg._splineArcData && distFromShared < sharedThreshold) {
+                if (seg._splineP && seg._splineArcData) {
                     const posT = remapToArcLength(seg._splineArcData, tWithGap);
                     splinePos = getParticlePos(seg._splineP, posT);
                 } else {
@@ -2543,10 +2534,8 @@
                     const spawnGap = p.segDuration / p.totalChars;
                     // Local spline speed (pixels per unit t) using remapped positions
                     const eps = 0.002;
-                    // Match the spline choice used above for pos: per-particle if far from shared.
-                    const usePerPart = !(seg && seg._splineP && seg._splineArcData && distFromShared < sharedThreshold);
-                    const asArc = usePerPart ? (p._arcData || (p._arcData = buildArcTable(p))) : seg._splineArcData;
-                    const asP   = usePerPart ? p : seg._splineP;
+                    const asArc = (seg && seg._splineArcData) ? seg._splineArcData : (p._arcData || (p._arcData = buildArcTable(p)));
+                    const asP   = (seg && seg._splineP) ? seg._splineP : p;
                     const posTSample = remapToArcLength(asArc, Math.min(tWithGap + eps, 1.0));
                     const posSample = getParticlePos(asP, posTSample);
                     const splineSpeed = Math.sqrt(
