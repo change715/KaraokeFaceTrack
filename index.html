@@ -2451,7 +2451,21 @@
                     effectiveKerning = P.letterKerning + (P.finalWordKerning - P.letterKerning) * kSmooth;
                 }
                 const rawTWithGap = uniformBaseT + p.numSpacesBefore * P.wordGap + effectiveWordIdx * effectiveKerning * kerningRamp;
-                const tWithGap = (p.isKept !== undefined) ? rawTWithGap : Math.min(1, rawTWithGap);
+                // Long-line spiral fix for normal lyrics: when many words
+                // accumulate a large negative `numSpacesBefore * wordGap` term,
+                // rawTWithGap can go deeply negative and `getParticlePos`
+                // extrapolates behind the spline origin — forming a growing
+                // spiral of letters at extrapolated positions.
+                // Fix: scale negative rawTWithGap by 10× toward zero so the
+                // extrapolation is bounded to a small amount behind the
+                // spline origin (tens of pixels, not hundreds), AND so the
+                // letter keeps moving continuously as rawTWithGap climbs
+                // toward zero — no hard stuck-at-clamp freeze.
+                // Positive range is unchanged. Spelling letters keep the raw
+                // value since they use explicit posT offsets during migration.
+                const tWithGap = (p.isKept !== undefined)
+                    ? rawTWithGap
+                    : (rawTWithGap >= 0 ? Math.min(1, rawTWithGap) : rawTWithGap * 0.1);
 
                 // Use the SEGMENT's shared spline (if available) so post-burst
                 // letters all ride the same track — prevents overlap when head moves.
