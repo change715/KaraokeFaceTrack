@@ -2320,36 +2320,18 @@
                 // end to full over the letter's life, so there's no position jump
                 // at the burst-to-spline boundary and no backward motion.
                 if (p.isKept !== undefined && spellTransProgress > 0 && linearT >= P.burstDuration) {
-                    // Cubic ramp for deceleration (very gradual onset),
-                    // smoothstep for catchup (engages slightly faster).
-                    const slowRamp = spellTransProgress * spellTransProgress * spellTransProgress;
                     const catchupRamp = spellTransProgress * spellTransProgress * (3 - 2 * spellTransProgress);
-                    const targetSlowMul = 1 - slowRamp * P.spellLeaderSlow;
                     const catchup = (p.charIndex / Math.max(1, p.totalChars - 1)) * p.segDuration * P.spellGrouping;
-                    // Use UNCLAMPED natural linearT so excess isn't capped at
-                    // 1.0 - burstDuration. Without this, the initial Math.min(…,1.0)
-                    // on linearT prevents letters from ever reaching the spline end.
                     const naturalLT = age * fontSpeedScale / P.charLifetime;
                     const excess = naturalLT - P.burstDuration;
-                    // Ease the slow factor in gradually after burst. The wider the
-                    // window, the more gradual the deceleration feels.
-                    const easeIn = Math.min(1, excess / 0.3);
-                    const slowMul = 1 - easeIn * (1 - targetSlowMul);
-                    // Square-root ramp: much faster than linear early on (12% at
-                    // excessFrac=0.01 vs 1.5%), so trailing letters get meaningful
-                    // catchup right after burst. Still 0 at burst boundary (no jump).
+                    // Slow tied to EXCESS (distance past burst), not progress.
+                    // This guarantees d(linearT)/dt > 0 for excess < ~1.8 at
+                    // leaderSlow=0.35 — letters ALWAYS move forward through most
+                    // of the spline. No monotonic guard needed.
+                    const slowFrac = Math.min(1, excess / 1.0);
+                    const slowMul = 1 - slowFrac * P.spellLeaderSlow;
                     const excessFrac = Math.sqrt(excess / Math.max(0.001, 1 - P.burstDuration));
-                    let newLT = P.burstDuration + excess * slowMul + catchupRamp * catchup / P.charLifetime * excessFrac;
-                    // Monotonic guard: prevent brief backward motion when slowMul
-                    // drops faster than excess grows. Letter holds position until
-                    // the computation catches up — never moves backward.
-                    if (p._prevSpellLT !== undefined && newLT < p._prevSpellLT) {
-                        newLT = p._prevSpellLT;
-                    }
-                    p._prevSpellLT = newLT;
-                    // Cap at 1.2 to prevent extreme spline extrapolation that can
-                    // crash the renderer with huge coordinates.
-                    linearT = Math.min(newLT, 1.2);
+                    linearT = Math.min(P.burstDuration + excess * slowMul + catchupRamp * catchup / P.charLifetime * excessFrac, 1.2);
                     t = easeBlended(linearT, P.linearBlend);
                 }
 
