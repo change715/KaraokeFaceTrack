@@ -1775,10 +1775,6 @@
             let ty = H * P.targetY + (baseY - H * P.targetY) * P.targetYTrack;
             // Never let target drift right of the configured targetX
             tx = Math.min(tx, W * P.targetX);
-            // Clamp spline span so extreme mouth positions don't produce
-            // wildly long/short curves (e.g. debug oscillation or head movement).
-            const maxSpan = W * 0.6;
-            if (p.startX - tx > maxSpan) tx = p.startX - maxSpan;
             const targetOffset = (Math.sin(p.seed * 7.13) * 0.5 + Math.sin(p.seed * 3.71) * 0.3 + Math.sin(p.seed * 11.3) * 0.2) * P.targetNoise;
             ty += targetOffset;
 
