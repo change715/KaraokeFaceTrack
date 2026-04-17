@@ -1789,10 +1789,8 @@
         }
 
         // ─── Get particle position ───
-        // Two-segment cubic bezier: start → CP1 → mid, mid → CP2 → target.
-        // Pass forceNoMidpoint=true to skip the midpoint (useful for far-spawned
-        // particles where the midpoint would create an awkward loop/waypoint).
-        function getParticlePos(p, t, forceNoMidpoint) {
+        // Two-segment cubic bezier: start → CP1 → mid, mid → CP2 → target
+        function getParticlePos(p, t) {
             const W = canvas.width, H = canvas.height;
             // Target with per-particle vertical noise
             // Target tracks face with a fixed offset — no thresholds, no jumps.
@@ -1805,7 +1803,7 @@
             const targetOffset = (Math.sin(p.seed * 7.13) * 0.5 + Math.sin(p.seed * 3.71) * 0.3 + Math.sin(p.seed * 11.3) * 0.2) * P.targetNoise;
             ty += targetOffset;
 
-            if (!P.useMidpoint || forceNoMidpoint) {
+            if (!P.useMidpoint) {
                 // Single cubic Bézier: start → target using cp1/cp2 relative to full span
                 const dx = tx - p.startX, dy = ty - p.startY;
                 const len = Math.sqrt(dx*dx + dy*dy) || 1;
@@ -1878,13 +1876,13 @@
         // Builds a lookup table so that equal t-steps produce equal pixel
         // distances along the curve, preventing letter bunching on tight bends.
         const ARC_SAMPLES = 64;
-        function buildArcTable(p, forceNoMidpoint) {
+        function buildArcTable(p) {
             const table = new Float64Array(ARC_SAMPLES + 1);
-            let prev = getParticlePos(p, 0, forceNoMidpoint);
+            let prev = getParticlePos(p, 0);
             let totalLen = 0;
             table[0] = 0;
             for (let i = 1; i <= ARC_SAMPLES; i++) {
-                const pt = getParticlePos(p, i / ARC_SAMPLES, forceNoMidpoint);
+                const pt = getParticlePos(p, i / ARC_SAMPLES);
                 totalLen += Math.sqrt((pt.x - prev.x) ** 2 + (pt.y - prev.y) ** 2);
                 table[i] = totalLen;
                 prev = pt;
@@ -2441,23 +2439,22 @@
                 // Fall back to per-particle spline if segment spline wasn't baked.
                 const seg = lyricsData[p.segIdx];
                 let splinePos;
-                // Use shared spline only for particles that spawned close to it.
-                // Far-spawned particles use their OWN spline AND skip the midpoint,
-                // since forcing them through the shared midpoint creates upward
-                // loops and pile-ups. Threshold: 10% of canvas width.
+                // Use the shared segment spline only if this particle spawned
+                // close to it. For long segments where the mouth drifts, far-away
+                // particles would otherwise have to take a huge diagonal during
+                // burst to reach the shared spline — looking like a "loop."
+                // Threshold: 20% of canvas width.
                 const sharedDx = seg._splineP ? (p.startX - seg._splineP.startX) : 0;
                 const sharedDy = seg._splineP ? (p.startY - seg._splineP.startY) : 0;
                 const distFromShared = Math.sqrt(sharedDx * sharedDx + sharedDy * sharedDy);
-                const sharedThreshold = canvas.width * 0.1;
-                const usePerPart = !(seg._splineP && seg._splineArcData && distFromShared < sharedThreshold);
-                if (!usePerPart) {
+                const sharedThreshold = canvas.width * 0.2;
+                if (seg._splineP && seg._splineArcData && distFromShared < sharedThreshold) {
                     const posT = remapToArcLength(seg._splineArcData, tWithGap);
                     splinePos = getParticlePos(seg._splineP, posT);
                 } else {
-                    // Per-particle spline, single bezier (no midpoint — avoids loop)
-                    if (!p._arcData) p._arcData = buildArcTable(p, true);
+                    if (!p._arcData) p._arcData = buildArcTable(p);
                     const posT = remapToArcLength(p._arcData, tWithGap);
-                    splinePos = getParticlePos(p, posT, true);
+                    splinePos = getParticlePos(p, posT);
                 }
 
                 let pos;
@@ -2546,11 +2543,12 @@
                     const spawnGap = p.segDuration / p.totalChars;
                     // Local spline speed (pixels per unit t) using remapped positions
                     const eps = 0.002;
-                    // Match the spline choice used above: per-particle (no midpoint) if far from shared.
-                    const asArc = usePerPart ? (p._arcData || (p._arcData = buildArcTable(p, true))) : seg._splineArcData;
+                    // Match the spline choice used above for pos: per-particle if far from shared.
+                    const usePerPart = !(seg && seg._splineP && seg._splineArcData && distFromShared < sharedThreshold);
+                    const asArc = usePerPart ? (p._arcData || (p._arcData = buildArcTable(p))) : seg._splineArcData;
                     const asP   = usePerPart ? p : seg._splineP;
                     const posTSample = remapToArcLength(asArc, Math.min(tWithGap + eps, 1.0));
-                    const posSample = getParticlePos(asP, posTSample, usePerPart);
+                    const posSample = getParticlePos(asP, posTSample);
                     const splineSpeed = Math.sqrt(
                         (posSample.x - splinePos.x) ** 2 + (posSample.y - splinePos.y) ** 2
                     ) / Math.max(eps, 0.0001);
