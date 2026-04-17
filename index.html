@@ -2320,18 +2320,18 @@
                 // end to full over the letter's life, so there's no position jump
                 // at the burst-to-spline boundary and no backward motion.
                 if (p.isKept !== undefined && spellTransProgress > 0 && linearT >= P.burstDuration) {
+                    // Cubic ramp for deceleration (very gradual onset),
+                    // smoothstep for catchup (engages slightly faster).
+                    const slowRamp = spellTransProgress * spellTransProgress * spellTransProgress;
                     const catchupRamp = spellTransProgress * spellTransProgress * (3 - 2 * spellTransProgress);
+                    const slowMul = 1 - slowRamp * P.spellLeaderSlow;
                     const catchup = (p.charIndex / Math.max(1, p.totalChars - 1)) * p.segDuration * P.spellGrouping;
-                    const naturalLT = age * fontSpeedScale / P.charLifetime;
-                    const excess = naturalLT - P.burstDuration;
-                    // Slow tied to EXCESS (distance past burst), not progress.
-                    // This guarantees d(linearT)/dt > 0 for excess < ~1.8 at
-                    // leaderSlow=0.35 — letters ALWAYS move forward through most
-                    // of the spline. No monotonic guard needed.
-                    const slowFrac = Math.min(1, excess / 1.0);
-                    const slowMul = 1 - slowFrac * P.spellLeaderSlow;
+                    const excess = linearT - P.burstDuration;
+                    // Square-root ramp: much faster than linear early on (12% at
+                    // excessFrac=0.01 vs 1.5%), so trailing letters get meaningful
+                    // catchup right after burst. Still 0 at burst boundary (no jump).
                     const excessFrac = Math.sqrt(excess / Math.max(0.001, 1 - P.burstDuration));
-                    linearT = Math.min(P.burstDuration + excess * slowMul + catchupRamp * catchup / P.charLifetime * excessFrac, 1.2);
+                    linearT = P.burstDuration + excess * slowMul + catchupRamp * catchup / P.charLifetime * excessFrac;
                     t = easeBlended(linearT, P.linearBlend);
                 }
 
@@ -2612,7 +2612,7 @@
             }
 
             if (showSplineViz) renderSplineViz();
-            try { renderParticles(timestamp); } catch (e) { console.warn('Render error:', e); }
+            renderParticles(timestamp);
             renderSubtitle();
 
             // Mouth dot (toggle via button)
