@@ -527,6 +527,12 @@
             html += `<button class="tweak-btn" id="tracking-dot-btn">Show Tracking Dot</button>`;
             html += `<button class="tweak-btn" id="debug-mode-btn">${debugMode ? 'Debug Mode: ON' : 'Debug Mode: OFF'}</button>`;
             html += `<button class="tweak-btn" id="jump-finale-btn">Jump to Final Hallelujahs</button>`;
+            html += `<div style="display:flex;gap:6px;margin:6px 0;align-items:center">
+                <input type="number" id="jump-min" min="0" max="10" value="0" style="width:44px;padding:4px;background:rgba(136,170,255,0.08);border:1px solid rgba(136,170,255,0.3);color:#88aaff;border-radius:4px" title="Minutes">
+                <span style="color:#88aaff">:</span>
+                <input type="number" id="jump-sec" min="0" max="59" value="0" style="width:44px;padding:4px;background:rgba(136,170,255,0.08);border:1px solid rgba(136,170,255,0.3);color:#88aaff;border-radius:4px" title="Seconds">
+                <button class="tweak-btn" id="jump-time-btn" style="margin:0;flex:1">Jump to Time</button>
+            </div>`;
             html += `<button class="tweak-btn" id="set-defaults-btn">Set Current as Default</button>`;
             html += `<button class="tweak-btn" id="reset-defaults-btn" style="color:#ff8888;border-color:rgba(255,136,136,0.4);background:rgba(255,136,136,0.1)">Reset to Original Defaults</button>`;
             html += `<button class="tweak-btn" id="hide-ui-btn" style="color:#ffcc66;border-color:rgba(255,204,102,0.4);background:rgba(255,204,102,0.1)">Hide UI (Press 1)</button>`;
@@ -640,6 +646,25 @@
                         log('Seek failed (server may not support Range): currentTime=' + audio.currentTime.toFixed(1));
                     } else {
                         log('Jumped to ' + audio.currentTime.toFixed(1) + 's');
+                    }
+                }, 300);
+            });
+
+            // Jump to user-specified time (minute:second inputs)
+            document.getElementById('jump-time-btn').addEventListener('click', () => {
+                const mins = parseInt(document.getElementById('jump-min').value, 10) || 0;
+                const secs = parseInt(document.getElementById('jump-sec').value, 10) || 0;
+                const target = mins * 60 + secs;
+                particles = [];
+                lastSegmentIndex = -1;
+                charSpawnIndex = 0;
+                audio.currentTime = target;
+                if (audio.paused) audio.play().catch(e => log('Audio error: ' + e.message));
+                setTimeout(() => {
+                    if (Math.abs(audio.currentTime - target) > 2) {
+                        log('Seek failed: currentTime=' + audio.currentTime.toFixed(1));
+                    } else {
+                        log('Jumped to ' + mins + ':' + String(secs).padStart(2, '0'));
                     }
                 }, 300);
             });
